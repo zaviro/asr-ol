@@ -209,8 +209,8 @@ def test_asr_worker_final_input_queue_is_backend_neutral() -> None:
     assert get_args(final_in_queue_type) == (TranscriptionBackendEvent,)
 
 
-def test_to_asr_final_event_accepts_structural_backend_event() -> None:
-    from voxkeep.modules.transcription.application.transcription_service import to_asr_final_event
+def test_normalize_backend_event_accepts_structural_backend_event() -> None:
+    from voxkeep.modules.transcription.infrastructure.asr_worker import _normalize_backend_event
     from types import SimpleNamespace
 
     event = SimpleNamespace(
@@ -221,7 +221,7 @@ def test_to_asr_final_event_accepts_structural_backend_event() -> None:
         is_final=True,
     )
 
-    normalized = to_asr_final_event(event)
+    normalized = _normalize_backend_event(event)
 
     assert isinstance(normalized, AsrFinalEvent)
     assert normalized.text == "structural"

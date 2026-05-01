@@ -6,7 +6,7 @@ import threading
 from voxkeep.modules.injection.contracts import InjectionResult
 from voxkeep.modules.injection.public import build_injection_module
 from voxkeep.shared.config import AppConfig
-from voxkeep.shared.types import CaptureCompleted
+from voxkeep.shared.events import CaptureCommand
 
 
 def test_injection_module_executes_capture_completed(monkeypatch, app_config: AppConfig) -> None:
@@ -21,7 +21,7 @@ def test_injection_module_executes_capture_completed(monkeypatch, app_config: Ap
     )
 
     result = module.execute_capture(
-        CaptureCompleted(
+        CaptureCommand(
             session_id=1,
             keyword="alexa",
             action="inject_text",
@@ -90,7 +90,7 @@ def test_injection_module_execute_capture_uses_public_worker_api(
     )
 
     result = module.execute_capture(
-        CaptureCompleted(
+        CaptureCommand(
             session_id=1,
             keyword="alexa",
             action="inject_text",

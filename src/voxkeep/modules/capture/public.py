@@ -19,22 +19,10 @@ from voxkeep.shared.events import (
     WakeEvent,
 )
 from voxkeep.shared.queue_utils import put_nowait_or_drop
-from voxkeep.modules.capture.application.capture_service import (
-    to_asr_final_event,
-    to_capture_completed,
-    to_vad_event,
-    to_wake_event,
-)
 from voxkeep.modules.capture.application.transcript_extractor import InMemoryTranscriptExtractor
 from voxkeep.modules.capture.domain.capture_fsm import CaptureFSM
 from voxkeep.modules.capture.infrastructure.capture_worker import (
     CaptureWorker as LegacyCaptureWorker,
-)
-from voxkeep.shared.types import (
-    CaptureCompleted,
-    SpeechBoundaryDetected,
-    TranscriptFinalized,
-    WakeDetected,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,19 +53,19 @@ class CaptureModule(Protocol):
         """Stop module resources."""
         raise NotImplementedError
 
-    def accept_wake(self, event: WakeDetected) -> None:
+    def accept_wake(self, event: WakeEvent) -> None:
         """Accept one wake detection event."""
         raise NotImplementedError
 
-    def accept_vad(self, event: SpeechBoundaryDetected) -> None:
+    def accept_vad(self, event: VadEvent) -> None:
         """Accept one VAD boundary event."""
         raise NotImplementedError
 
-    def accept_transcript(self, event: TranscriptFinalized) -> None:
+    def accept_transcript(self, event: AsrFinalEvent) -> None:
         """Accept one transcript event."""
         raise NotImplementedError
 
-    def subscribe_capture_completed(self, handler: Callable[[CaptureCompleted], None]) -> None:
+    def subscribe_capture_completed(self, handler: Callable[[CaptureCommand], None]) -> None:
         """Subscribe to capture completion events."""
         raise NotImplementedError
 
@@ -113,7 +101,7 @@ class WorkerCaptureModule:
         )
         self._downstream_queue = downstream_queue
         self._stop_event = stop_event
-        self._handlers: list[Callable[[CaptureCompleted], None]] = []
+        self._handlers: list[Callable[[CaptureCommand], None]] = []
         self._fanout_thread: threading.Thread | None = None
 
         self._fsm = CaptureFSM(pre_roll_ms=cfg.pre_roll_ms, armed_timeout_ms=cfg.armed_timeout_ms)
@@ -157,19 +145,19 @@ class WorkerCaptureModule:
         fanout_alive = self._fanout_thread is not None and self._fanout_thread.is_alive()
         return self._worker.is_alive() or fanout_alive
 
-    def accept_wake(self, event: WakeDetected) -> None:
+    def accept_wake(self, event: WakeEvent) -> None:
         """Accept one wake detection event."""
-        put_nowait_or_drop(self._wake_queue, to_wake_event(event), logger=logger)
+        put_nowait_or_drop(self._wake_queue, event, logger=logger)
 
-    def accept_vad(self, event: SpeechBoundaryDetected) -> None:
+    def accept_vad(self, event: VadEvent) -> None:
         """Accept one VAD boundary event."""
-        put_nowait_or_drop(self._vad_queue, to_vad_event(event), logger=logger)
+        put_nowait_or_drop(self._vad_queue, event, logger=logger)
 
-    def accept_transcript(self, event: TranscriptFinalized) -> None:
+    def accept_transcript(self, event: AsrFinalEvent) -> None:
         """Accept one transcript event."""
-        put_nowait_or_drop(self._asr_queue, to_asr_final_event(event), logger=logger)
+        put_nowait_or_drop(self._asr_queue, event, logger=logger)
 
-    def subscribe_capture_completed(self, handler: Callable[[CaptureCompleted], None]) -> None:
+    def subscribe_capture_completed(self, handler: Callable[[CaptureCommand], None]) -> None:
         """Subscribe to capture completion events."""
         self._handlers.append(handler)
 
@@ -180,9 +168,8 @@ class WorkerCaptureModule:
             except queue.Empty:
                 continue
             put_nowait_or_drop(self._downstream_queue, command, logger=logger)
-            event = to_capture_completed(command)
             for handler in self._handlers:
-                handler(event)
+                handler(command)
 
 
 def build_capture_module(

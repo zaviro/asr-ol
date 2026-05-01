@@ -11,10 +11,9 @@ import pytest
 
 from voxkeep.modules.transcription.application.backend_events import BackendTranscriptEvent
 from voxkeep.modules.transcription.contracts import TranscriptionBackendEvent, TranscriptionEngine
-from voxkeep.shared.events import AsrFinalEvent, StorageRecord
+from voxkeep.shared.events import AsrFinalEvent, ProcessedFrame, StorageRecord
 from voxkeep.modules.transcription.public import build_transcription_module
 from voxkeep.shared.config import AppConfig
-from voxkeep.shared.types import AudioFrame
 
 
 class _FakeEngine:
@@ -90,7 +89,7 @@ def test_transcription_module_submits_audio_and_emits_public_events(
     module.subscribe_transcript_finalized(lambda event: seen.append(event.text))
     module.start()
     module.submit_audio(
-        AudioFrame(
+        ProcessedFrame(
             frame_id=1,
             data_int16=(b"\x00\x00" * 160),
             pcm_f32=np.zeros(160, dtype=np.float32),
@@ -303,7 +302,7 @@ def test_transcription_module_submit_audio_drops_when_queue_is_full(
         storage_cfg=app_config.storage,
         in_queue=queue.Queue(maxsize=1),
     )
-    frame = AudioFrame(
+    frame = ProcessedFrame(
         frame_id=1,
         data_int16=(b"\x00\x00" * 160),
         pcm_f32=np.zeros(160, dtype=np.float32),

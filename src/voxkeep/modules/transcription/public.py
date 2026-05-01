@@ -7,17 +7,12 @@ import queue
 import threading
 from typing import Callable, Protocol
 
-from voxkeep.modules.transcription.application.transcription_service import (
-    to_processed_frame,
-    to_transcript_finalized,
-)
 from voxkeep.modules.transcription.contracts import TranscriptionBackendEvent, TranscriptionEngine
 from voxkeep.modules.transcription.infrastructure.asr_worker import AsrWorker as LegacyAsrWorker
 from voxkeep.modules.transcription.infrastructure.engine_factory import build_asr_engine
 from voxkeep.shared.config import AsrConfig, StorageConfig
 from voxkeep.shared.events import AsrFinalEvent, ProcessedFrame, StorageRecord
 from voxkeep.shared.queue_utils import put_nowait_or_drop
-from voxkeep.shared.types import AudioFrame, TranscriptFinalized
 
 logger = logging.getLogger(__name__)
 _QUEUE_GET_TIMEOUT_S = 0.1
@@ -34,13 +29,11 @@ class TranscriptionModule(Protocol):
         """Stop module resources."""
         raise NotImplementedError
 
-    def submit_audio(self, frame: AudioFrame) -> None:
+    def submit_audio(self, frame: ProcessedFrame) -> None:
         """Submit one audio frame into the transcription pipeline."""
         raise NotImplementedError
 
-    def subscribe_transcript_finalized(
-        self, handler: Callable[[TranscriptFinalized], None]
-    ) -> None:
+    def subscribe_transcript_finalized(self, handler: Callable[[AsrFinalEvent], None]) -> None:
         """Subscribe to final transcript events."""
         raise NotImplementedError
 
@@ -72,7 +65,7 @@ class WorkerTranscriptionModule:
             maxsize=asr_cfg.max_queue_size
         )
         self._stop_event = stop_event
-        self._handlers: list[Callable[[TranscriptFinalized], None]] = []
+        self._handlers: list[Callable[[AsrFinalEvent], None]] = []
         self._backend_bridge_thread: threading.Thread | None = None
         self._fanout_thread: threading.Thread | None = None
 
@@ -114,19 +107,16 @@ class WorkerTranscriptionModule:
         """Expose a symmetric lifecycle hook for the runtime module."""
         self._stop_event.set()
 
-    def submit_audio(self, frame: AudioFrame) -> None:
+    def submit_audio(self, frame: ProcessedFrame) -> None:
         """Submit one audio frame into the transcription pipeline."""
-        processed = to_processed_frame(frame)
         put_nowait_or_drop(
             self._in_queue,
-            processed,
+            frame,
             logger=logger,
-            warning=f"transcription input queue full; dropping frame_id={processed.frame_id}",
+            warning=f"transcription input queue full; dropping frame_id={frame.frame_id}",
         )
 
-    def subscribe_transcript_finalized(
-        self, handler: Callable[[TranscriptFinalized], None]
-    ) -> None:
+    def subscribe_transcript_finalized(self, handler: Callable[[AsrFinalEvent], None]) -> None:
         """Subscribe to final transcript events."""
         self._handlers.append(handler)
 
@@ -167,9 +157,8 @@ class WorkerTranscriptionModule:
                 event = self._public_out_queue.get(timeout=_QUEUE_GET_TIMEOUT_S)
             except queue.Empty:
                 continue
-            public_event = to_transcript_finalized(event)
             for handler in self._handlers:
-                handler(public_event)
+                handler(event)
 
 
 def build_transcription_module(

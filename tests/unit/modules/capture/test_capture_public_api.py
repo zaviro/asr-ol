@@ -7,7 +7,7 @@ import time
 from voxkeep.shared.events import CaptureCommand
 from voxkeep.modules.capture.public import build_capture_module
 from voxkeep.shared.config import AppConfig
-from voxkeep.shared.types import SpeechBoundaryDetected, TranscriptFinalized, WakeDetected
+from voxkeep.shared.events import AsrFinalEvent, VadEvent, WakeEvent
 
 
 def test_capture_module_emits_capture_completed_and_forwards_command(
@@ -27,17 +27,17 @@ def test_capture_module_emits_capture_completed_and_forwards_command(
     module.subscribe_capture_completed(lambda event: seen.append(event.text))
     module.start()
 
-    module.accept_wake(WakeDetected(ts=1.0, score=0.9, keyword="alexa"))
+    module.accept_wake(WakeEvent(ts=1.0, score=0.9, keyword="alexa"))
     module.accept_transcript(
-        TranscriptFinalized(
+        AsrFinalEvent(
             segment_id="seg-1",
             text="hello world",
             start_ts=1.0,
             end_ts=1.3,
         )
     )
-    module.accept_vad(SpeechBoundaryDetected(ts=1.1, event_type="speech_start", score=0.8))
-    module.accept_vad(SpeechBoundaryDetected(ts=1.4, event_type="speech_end", score=0.1))
+    module.accept_vad(VadEvent(ts=1.1, event_type="speech_start", score=0.8))
+    module.accept_vad(VadEvent(ts=1.4, event_type="speech_end", score=0.1))
 
     deadline = time.time() + 2.0
     while time.time() < deadline and not seen:

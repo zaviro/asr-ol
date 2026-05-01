@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import queue
 import threading
 from typing import Protocol
 
-from voxkeep.modules.storage.application.store import build_capture_write, build_transcript_write
-from voxkeep.modules.storage.contracts import StorageWrite
+from voxkeep.modules.storage.contracts import StorageRecord
 from voxkeep.modules.storage.infrastructure.sqlite_storage_worker import SqliteStorageWorker
 from voxkeep.shared.config import StorageConfig
-from voxkeep.shared.types import CaptureCompleted, TranscriptFinalized
-from voxkeep.shared.events import StorageRecord
+from voxkeep.shared.events import AsrFinalEvent, CaptureCommand
 
 
 class StorageModule(Protocol):
@@ -33,11 +32,11 @@ class StorageModule(Protocol):
         """Return whether module worker resources are alive."""
         raise NotImplementedError
 
-    def store_transcript(self, event: TranscriptFinalized) -> StorageWrite:
+    def store_transcript(self, event: AsrFinalEvent) -> StorageRecord:
         """Convert one transcript event into a storage write request."""
         raise NotImplementedError
 
-    def store_capture(self, event: CaptureCompleted) -> StorageWrite:
+    def store_capture(self, event: CaptureCommand) -> StorageRecord:
         """Convert one capture event into a storage write request."""
         raise NotImplementedError
 
@@ -77,13 +76,27 @@ class SqliteStorageModule:
         """Report whether the underlying worker thread is alive."""
         return self._worker.is_alive()
 
-    def store_transcript(self, event: TranscriptFinalized) -> StorageWrite:
+    def store_transcript(self, event: AsrFinalEvent) -> StorageRecord:
         """Convert a transcript event into a storage write request."""
-        return build_transcript_write(event)
+        return StorageRecord(
+            source="stream",
+            text=event.text,
+            start_ts=event.start_ts,
+            end_ts=event.end_ts,
+            is_final=event.is_final,
+            created_at=datetime.now(tz=timezone.utc).isoformat(),
+        )
 
-    def store_capture(self, event: CaptureCompleted) -> StorageWrite:
+    def store_capture(self, event: CaptureCommand) -> StorageRecord:
         """Convert a capture event into a storage write request."""
-        return build_capture_write(event)
+        return StorageRecord(
+            source="capture",
+            text=event.text,
+            start_ts=event.start_ts,
+            end_ts=event.end_ts,
+            is_final=True,
+            created_at=datetime.now(tz=timezone.utc).isoformat(),
+        )
 
 
 def build_storage_module(

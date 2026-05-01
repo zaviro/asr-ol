@@ -6,12 +6,10 @@ import queue
 import threading
 from typing import Protocol
 
-from voxkeep.modules.injection.application.execute_capture import to_capture_command, to_result
 from voxkeep.modules.injection.contracts import InjectionResult
 from voxkeep.modules.injection.infrastructure.factory import build_injector
 from voxkeep.modules.injection.infrastructure.injector_worker import InjectorWorker
 from voxkeep.shared.config import InjectorConfig
-from voxkeep.shared.types import CaptureCompleted
 from voxkeep.shared.events import CaptureCommand
 
 
@@ -34,7 +32,7 @@ class InjectionModule(Protocol):
         """Return whether module worker resources are alive."""
         raise NotImplementedError
 
-    def execute_capture(self, event: CaptureCompleted) -> InjectionResult:
+    def execute_capture(self, event: CaptureCommand) -> InjectionResult:
         """Execute the configured output action for a capture event."""
         raise NotImplementedError
 
@@ -74,10 +72,10 @@ class WorkerInjectionModule:
         """Report whether the underlying worker thread is alive."""
         return self._worker.is_alive()
 
-    def execute_capture(self, event: CaptureCompleted) -> InjectionResult:
+    def execute_capture(self, event: CaptureCommand) -> InjectionResult:
         """Execute one capture event through the configured output action."""
-        ok = self._worker.execute_command(to_capture_command(event))
-        return to_result(event.action, ok)
+        ok = self._worker.execute_command(event)
+        return InjectionResult(ok=ok, action=event.action)
 
 
 def build_injection_module(

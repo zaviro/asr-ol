@@ -3,10 +3,10 @@ from __future__ import annotations
 import queue
 import threading
 
-from voxkeep.modules.storage.contracts import StorageWrite
+from voxkeep.modules.storage.contracts import StorageRecord
 from voxkeep.modules.storage.public import build_storage_module
 from voxkeep.shared.config import AppConfig
-from voxkeep.shared.types import CaptureCompleted, TranscriptFinalized
+from voxkeep.shared.events import AsrFinalEvent, CaptureCommand
 
 
 def test_storage_module_converts_public_events_to_storage_writes(app_config: AppConfig) -> None:
@@ -17,7 +17,7 @@ def test_storage_module_converts_public_events_to_storage_writes(app_config: App
     )
 
     transcript_write = module.store_transcript(
-        TranscriptFinalized(
+        AsrFinalEvent(
             segment_id="seg-1",
             text="hello",
             start_ts=1.0,
@@ -25,7 +25,7 @@ def test_storage_module_converts_public_events_to_storage_writes(app_config: App
         )
     )
     capture_write = module.store_capture(
-        CaptureCompleted(
+        CaptureCommand(
             session_id=1,
             keyword="alexa",
             action="inject_text",
@@ -35,23 +35,21 @@ def test_storage_module_converts_public_events_to_storage_writes(app_config: App
         )
     )
 
-    assert transcript_write == StorageWrite(
+    assert transcript_write == StorageRecord(
         source="stream",
         text="hello",
         start_ts=1.0,
         end_ts=1.2,
         is_final=True,
         created_at=transcript_write.created_at,
-        meta_json=None,
     )
-    assert capture_write == StorageWrite(
+    assert capture_write == StorageRecord(
         source="capture",
         text="world",
         start_ts=2.0,
         end_ts=2.2,
         is_final=True,
         created_at=capture_write.created_at,
-        meta_json=None,
     )
 
 

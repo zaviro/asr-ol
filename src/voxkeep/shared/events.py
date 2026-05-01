@@ -8,7 +8,7 @@ from typing import Literal
 import numpy as np
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class RawAudioChunk:
     """Raw audio bytes captured from the input source."""
 
@@ -21,7 +21,11 @@ class RawAudioChunk:
 
 @dataclass(slots=True)
 class ProcessedFrame:
-    """Preprocessed frame fanned out to wake/VAD/ASR workers."""
+    """Preprocessed frame fanned out to wake/VAD/ASR workers.
+
+    This type is intentionally mutable because pcm_f32 is a live numpy
+    array that cannot be hashed for frozen dataclass semantics.
+    """
 
     frame_id: int
     data_int16: bytes
@@ -31,7 +35,7 @@ class ProcessedFrame:
     ts_end: float
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class WakeEvent:
     """Wake word detection result emitted by wake worker."""
 
@@ -40,7 +44,7 @@ class WakeEvent:
     keyword: str
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class VadEvent:
     """Voice activity transition emitted by VAD worker."""
 
@@ -49,7 +53,7 @@ class VadEvent:
     score: float
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class AsrFinalEvent:
     """ASR final transcript segment."""
 
@@ -60,7 +64,7 @@ class AsrFinalEvent:
     is_final: bool = True
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class CaptureCommand:
     """Final capture output that triggers downstream action."""
 
@@ -72,7 +76,7 @@ class CaptureCommand:
     end_ts: float
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class StorageRecord:
     """Persistable transcript or capture record."""
 

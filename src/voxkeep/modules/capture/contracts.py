@@ -1,5 +1,5 @@
 """Public contracts for the capture module."""
 
-from voxkeep.shared.types import CaptureCompleted
+from voxkeep.shared.events import CaptureCommand
 
-__all__ = ["CaptureCompleted"]
+__all__ = ["CaptureCommand"]

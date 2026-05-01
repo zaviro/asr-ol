@@ -7,13 +7,24 @@ import logging
 import queue
 import threading
 
-from voxkeep.modules.transcription.application.transcription_service import to_asr_final_event
 from voxkeep.modules.transcription.contracts import (
     TranscriptionBackendEvent,
     TranscriptionEngine,
 )
 from voxkeep.shared.events import AsrFinalEvent, ProcessedFrame, StorageRecord
 from voxkeep.shared.queue_utils import put_nowait_or_drop
+
+
+def _normalize_backend_event(event: TranscriptionBackendEvent) -> AsrFinalEvent:
+    """Normalize one backend transcript event into the shared ASR event type."""
+    return AsrFinalEvent(
+        segment_id=event.segment_id,
+        text=event.text,
+        start_ts=event.start_ts,
+        end_ts=event.end_ts,
+        is_final=event.is_final,
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +106,7 @@ class AsrWorker:
             except queue.Empty:
                 return
 
-            normalized_event = to_asr_final_event(event)
+            normalized_event = _normalize_backend_event(event)
             if not normalized_event.is_final:
                 continue
             self._fanout_event(normalized_event)

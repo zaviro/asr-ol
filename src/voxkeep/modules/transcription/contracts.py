@@ -5,8 +5,7 @@ from __future__ import annotations
 import queue
 from typing import Protocol
 
-from voxkeep.shared.events import ProcessedFrame
-from voxkeep.shared.types import TranscriptFinalized
+from voxkeep.shared.events import AsrFinalEvent, ProcessedFrame
 
 
 class TranscriptionEngine(Protocol):
@@ -44,4 +43,4 @@ class TranscriptionBackendEvent(Protocol):
     is_final: bool
 
 
-__all__ = ["TranscriptFinalized", "TranscriptionBackendEvent", "TranscriptionEngine"]
+__all__ = ["AsrFinalEvent", "TranscriptionBackendEvent", "TranscriptionEngine"]
