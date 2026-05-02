@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 import queue
 import threading
+import time
 from typing import Callable, Protocol
 
+from voxkeep.modules.capture.application.transcript_extractor import (
+    InMemoryTranscriptExtractor,
+    TranscriptExtractor,
+)
+from voxkeep.modules.capture.domain.capture_fsm import CaptureFSM, CaptureWindow
 from voxkeep.modules.capture.infrastructure.openwakeword_worker import OpenWakeWordWorker
 from voxkeep.modules.capture.infrastructure.silero_worker import SileroVadWorker
 from voxkeep.shared.config import CaptureConfig
@@ -19,13 +26,9 @@ from voxkeep.shared.events import (
     WakeEvent,
 )
 from voxkeep.shared.queue_utils import put_nowait_or_drop
-from voxkeep.modules.capture.application.transcript_extractor import InMemoryTranscriptExtractor
-from voxkeep.modules.capture.domain.capture_fsm import CaptureFSM
-from voxkeep.modules.capture.infrastructure.capture_worker import (
-    CaptureWorker as LegacyCaptureWorker,
-)
 
 logger = logging.getLogger(__name__)
+_IDLE_SLEEP_S = 0.01
 _QUEUE_GET_TIMEOUT_S = 0.1
 
 
@@ -79,7 +82,7 @@ class CaptureModule(Protocol):
 
 
 class WorkerCaptureModule:
-    """Public capture module backed by the legacy capture worker."""
+    """Capture module that runs wake-triggered capture orchestration in a background thread."""
 
     def __init__(
         self,
@@ -91,59 +94,51 @@ class WorkerCaptureModule:
         wake_queue: queue.Queue[WakeEvent] | None = None,
         vad_queue: queue.Queue[VadEvent] | None = None,
         asr_queue: queue.Queue[AsrFinalEvent] | None = None,
+        _fsm: CaptureFSM | None = None,
+        _transcript_extractor: TranscriptExtractor | None = None,
     ) -> None:
-        """Create a capture module backed by the worker implementation."""
+        """Create capture module dependencies and routing rules."""
         self._wake_queue = wake_queue or queue.Queue(maxsize=cfg.max_queue_size)
         self._vad_queue = vad_queue or queue.Queue(maxsize=cfg.max_queue_size)
         self._asr_queue = asr_queue or queue.Queue(maxsize=cfg.max_queue_size)
-        self._public_out_queue: queue.Queue[CaptureCommand] = queue.Queue(
-            maxsize=cfg.max_queue_size
-        )
         self._downstream_queue = downstream_queue
+        self._storage_queue = storage_queue
         self._stop_event = stop_event
         self._handlers: list[Callable[[CaptureCommand], None]] = []
-        self._fanout_thread: threading.Thread | None = None
+        self._thread: threading.Thread | None = None
 
-        self._fsm = CaptureFSM(pre_roll_ms=cfg.pre_roll_ms, armed_timeout_ms=cfg.armed_timeout_ms)
-        self._extractor = InMemoryTranscriptExtractor()
-        self._worker = LegacyCaptureWorker(
-            wake_queue=self._wake_queue,
-            vad_queue=self._vad_queue,
-            asr_queue=self._asr_queue,
-            out_queue=self._public_out_queue,
-            storage_queue=storage_queue,
-            stop_event=stop_event,
-            fsm=self._fsm,
-            transcript_extractor=self._extractor,
-            action_by_keyword={rule.keyword: rule.action for rule in cfg.enabled_wake_rules},
-            default_action="inject_text",
+        self._fsm = (
+            _fsm
+            if _fsm is not None
+            else CaptureFSM(pre_roll_ms=cfg.pre_roll_ms, armed_timeout_ms=cfg.armed_timeout_ms)
         )
+        self._extractor = (
+            _transcript_extractor
+            if _transcript_extractor is not None
+            else InMemoryTranscriptExtractor()
+        )
+        self._action_by_keyword = {rule.keyword: rule.action for rule in cfg.enabled_wake_rules}
+        self._default_action = "inject_text"
 
     def start(self) -> None:
-        """Start the underlying capture worker and fanout bridge."""
-        if self._fanout_thread is None:
-            self._fanout_thread = threading.Thread(
-                target=self._fanout_loop,
-                name="capture_public_fanout",
-                daemon=True,
-            )
-            self._fanout_thread.start()
-        self._worker.start()
+        """Start the capture module background thread."""
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._run, name="capture_module", daemon=True)
+        self._thread.start()
 
     def stop(self) -> None:
         """Expose a symmetric lifecycle hook for the runtime module."""
         self._stop_event.set()
 
     def join(self, timeout: float | None = None) -> None:
-        """Join worker and fanout threads."""
-        self._worker.join(timeout=timeout)
-        if self._fanout_thread is not None:
-            self._fanout_thread.join(timeout=timeout)
+        """Join the background thread."""
+        if self._thread is not None:
+            self._thread.join(timeout=timeout)
 
     def is_alive(self) -> bool:
-        """Report whether worker and fanout resources are alive."""
-        fanout_alive = self._fanout_thread is not None and self._fanout_thread.is_alive()
-        return self._worker.is_alive() or fanout_alive
+        """Report whether the background thread is alive."""
+        return self._thread is not None and self._thread.is_alive()
 
     def accept_wake(self, event: WakeEvent) -> None:
         """Accept one wake detection event."""
@@ -161,15 +156,100 @@ class WorkerCaptureModule:
         """Subscribe to capture completion events."""
         self._handlers.append(handler)
 
-    def _fanout_loop(self) -> None:
-        while not self._stop_event.is_set() or not self._public_out_queue.empty():
-            try:
-                command = self._public_out_queue.get(timeout=_QUEUE_GET_TIMEOUT_S)
-            except queue.Empty:
-                continue
-            put_nowait_or_drop(self._downstream_queue, command, logger=logger)
-            for handler in self._handlers:
-                handler(command)
+    def _run(self) -> None:
+        logger.info("capture module started")
+        while (
+            not self._stop_event.is_set()
+            or not self._wake_queue.empty()
+            or not self._vad_queue.empty()
+            or not self._asr_queue.empty()
+        ):
+            had_event = self._consume_once()
+            self._fsm.tick()
+            if not had_event:
+                time.sleep(_IDLE_SLEEP_S)
+        logger.info("capture module stopped")
+
+    def _consume_once(self) -> bool:
+        handled = False
+
+        try:
+            wake_event = self._wake_queue.get_nowait()
+            self._fsm.on_wake(wake_event)
+            handled = True
+        except queue.Empty:
+            pass
+
+        try:
+            asr_event = self._asr_queue.get_nowait()
+            self._extractor.on_asr_final(asr_event)
+            handled = True
+        except queue.Empty:
+            pass
+
+        try:
+            vad_event = self._vad_queue.get_nowait()
+            window = self._fsm.on_vad(vad_event)
+            if window is not None:
+                self._emit_capture(window)
+            handled = True
+        except queue.Empty:
+            pass
+
+        return handled
+
+    def _emit_capture(self, window: CaptureWindow) -> None:
+        start_ts = window.start_ts
+        end_ts = window.end_ts
+        keyword = window.keyword
+        session_id = window.session_id
+        text = self._extractor.extract(start_ts=start_ts, end_ts=end_ts)
+        if not text:
+            logger.info("capture empty session_id=%s keyword=%s", session_id, keyword)
+            return
+
+        action = self._action_by_keyword.get(keyword, self._default_action)
+        command = CaptureCommand(
+            session_id=session_id,
+            keyword=keyword,
+            action=action,
+            text=text,
+            start_ts=start_ts,
+            end_ts=end_ts,
+        )
+        if put_nowait_or_drop(
+            self._downstream_queue,
+            command,
+            logger=logger,
+            warning=f"capture out queue full; dropping session_id={command.session_id}",
+        ):
+            logger.info(
+                "capture finalized session_id=%s keyword=%s action=%s text=%s",
+                command.session_id,
+                command.keyword,
+                command.action,
+                command.text,
+            )
+        else:
+            return
+
+        for handler in self._handlers:
+            handler(command)
+
+        record = StorageRecord(
+            source="capture",
+            text=command.text,
+            start_ts=command.start_ts,
+            end_ts=command.end_ts,
+            is_final=True,
+            created_at=datetime.now(tz=timezone.utc).isoformat(),
+        )
+        put_nowait_or_drop(
+            self._storage_queue,
+            record,
+            logger=logger,
+            warning=f"storage queue full; dropping capture storage session_id={command.session_id}",
+        )
 
 
 def build_capture_module(

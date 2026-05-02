@@ -5,9 +5,8 @@ import queue
 import subprocess
 import threading
 
-from voxkeep.modules.capture.application.transcript_extractor import InMemoryTranscriptExtractor
-from voxkeep.modules.capture.domain.capture_fsm import CaptureFSM
-from voxkeep.modules.capture.infrastructure.capture_worker import CaptureWorker
+from voxkeep.modules.capture.public import WorkerCaptureModule
+from voxkeep.shared.config import CaptureConfig, WakeRuleConfig
 from voxkeep.shared.events import AsrFinalEvent, VadEvent, WakeEvent
 
 
@@ -28,17 +27,29 @@ def test_openclaw_triggered_by_wake_with_asr_hi_returns_payload(require_openclaw
     asr_q: queue.Queue[AsrFinalEvent] = queue.Queue()
     out_q = queue.Queue()
     storage_q = queue.Queue()
-    worker = CaptureWorker(
+
+    cfg = CaptureConfig(
+        wake_threshold=0.5,
+        wake_rules=(
+            WakeRuleConfig(
+                keyword="hey_jarvis", enabled=True, threshold=0.5, action="openclaw_agent"
+            ),
+        ),
+        vad_speech_threshold=0.5,
+        vad_silence_ms=300,
+        pre_roll_ms=200,
+        armed_timeout_ms=2000,
+        max_queue_size=10,
+    )
+
+    module = WorkerCaptureModule(
         wake_queue=wake_q,
         vad_queue=vad_q,
         asr_queue=asr_q,
-        out_queue=out_q,
+        downstream_queue=out_q,
         storage_queue=storage_q,
         stop_event=threading.Event(),
-        fsm=CaptureFSM(pre_roll_ms=200, armed_timeout_ms=2000),
-        transcript_extractor=InMemoryTranscriptExtractor(),
-        action_by_keyword={"hey_jarvis": "openclaw_agent"},
-        default_action="inject_text",
+        cfg=cfg,
     )
 
     wake_q.put(WakeEvent(ts=10.0, score=0.9, keyword="hey_jarvis"))
@@ -52,8 +63,8 @@ def test_openclaw_triggered_by_wake_with_asr_hi_returns_payload(require_openclaw
     )
     vad_q.put(VadEvent(ts=10.1, event_type="speech_start", score=0.9))
     vad_q.put(VadEvent(ts=10.5, event_type="speech_end", score=0.1))
-    worker._consume_once()
-    worker._consume_once()
+    module._consume_once()
+    module._consume_once()
 
     cmd = out_q.get_nowait()
     assert cmd.action == "openclaw_agent"

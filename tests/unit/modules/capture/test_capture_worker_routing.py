@@ -4,7 +4,8 @@ import queue
 import threading
 
 from voxkeep.modules.capture.domain.capture_fsm import CaptureWindow
-from voxkeep.modules.capture.infrastructure.capture_worker import CaptureWorker
+from voxkeep.modules.capture.public import WorkerCaptureModule
+from voxkeep.shared.config import CaptureConfig, WakeRuleConfig
 from voxkeep.shared.events import AsrFinalEvent, VadEvent, WakeEvent
 
 
@@ -42,24 +43,38 @@ def test_capture_worker_routes_action_by_keyword():
     out_q = queue.Queue()
     storage_q = queue.Queue()
 
-    worker = CaptureWorker(
+    cfg = CaptureConfig(
+        wake_threshold=0.5,
+        wake_rules=(
+            WakeRuleConfig(
+                keyword="hey_jarvis", enabled=True, threshold=0.5, action="openclaw_agent"
+            ),
+            WakeRuleConfig(keyword="alexa", enabled=True, threshold=0.5, action="inject_text"),
+        ),
+        vad_speech_threshold=0.5,
+        vad_silence_ms=300,
+        pre_roll_ms=120,
+        armed_timeout_ms=2000,
+        max_queue_size=10,
+    )
+
+    module = WorkerCaptureModule(
         wake_queue=wake_q,
         vad_queue=vad_q,
         asr_queue=asr_q,
-        out_queue=out_q,
+        downstream_queue=out_q,
         storage_queue=storage_q,
         stop_event=threading.Event(),
-        fsm=FakeFSM(),
-        transcript_extractor=FakeExtractor(),
-        action_by_keyword={"hey_jarvis": "openclaw_agent", "alexa": "inject_text"},
-        default_action="inject_text",
+        cfg=cfg,
+        _fsm=FakeFSM(),
+        _transcript_extractor=FakeExtractor(),
     )
 
     wake_q.put(WakeEvent(ts=1.0, score=0.8, keyword="hey_jarvis"))
     asr_q.put(AsrFinalEvent(segment_id="a", text="ignored", start_ts=1.1, end_ts=1.2))
     vad_q.put(VadEvent(ts=1.5, event_type="speech_end", score=0.1))
 
-    worker._consume_once()
+    module._consume_once()
 
     cmd = out_q.get_nowait()
     assert cmd.keyword == "hey_jarvis"

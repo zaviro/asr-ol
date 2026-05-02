@@ -12,19 +12,17 @@ import wave
 import numpy as np
 import pytest
 
-from voxkeep.modules.capture.application.transcript_extractor import InMemoryTranscriptExtractor
-from voxkeep.modules.capture.domain.capture_fsm import CaptureFSM
-from voxkeep.modules.capture.infrastructure.capture_worker import CaptureWorker
+from voxkeep.modules.capture.public import WorkerCaptureModule
+from voxkeep.modules.transcription.application.backend_events import BackendTranscriptEvent
+from voxkeep.modules.transcription.public import WorkerTranscriptionModule
 from voxkeep.shared.config import AppConfig
 from voxkeep.shared.events import (
-    AsrFinalEvent,
     ProcessedFrame,
     RawAudioChunk,
     StorageRecord,
     VadEvent,
     WakeEvent,
 )
-from voxkeep.modules.transcription.infrastructure.asr_worker import AsrWorker
 from voxkeep.modules.audio_engine.infrastructure.audio_bus import AudioBus
 
 
@@ -36,7 +34,7 @@ HEY_JARVIS_AUDIO = FIXTURE_DIR / "hey_jarvis_openclaw_zh.wav"
 
 class FakeStreamingAsrEngine:
     def __init__(self, transcript: str):
-        self.final_queue: queue.Queue[AsrFinalEvent] = queue.Queue()
+        self.final_queue: queue.Queue[BackendTranscriptEvent] = queue.Queue()
         self._transcript = transcript
         self._emitted = False
 
@@ -50,12 +48,12 @@ class FakeStreamingAsrEngine:
             return
         self._emitted = True
         self.final_queue.put_nowait(
-            AsrFinalEvent(
+            BackendTranscriptEvent(
                 segment_id="seg-tts",
                 text=self._transcript,
                 start_ts=frame.ts_start,
                 end_ts=frame.ts_end,
-                is_final=True,
+                event_type="final",
             )
         )
 
@@ -169,8 +167,7 @@ def test_pipeline_end_to_end_with_gptsovits_audio(app_config: AppConfig):
 
     wake_event_q: queue.Queue[WakeEvent] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
     vad_event_q: queue.Queue[VadEvent] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
-    asr_event_bus: queue.Queue[AsrFinalEvent] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
-    capture_asr_q: queue.Queue[AsrFinalEvent] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
+    capture_asr_q = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
     capture_cmd_q = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
     storage_q: queue.Queue[StorageRecord] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
 
@@ -183,30 +180,24 @@ def test_pipeline_end_to_end_with_gptsovits_audio(app_config: AppConfig):
     )
 
     engine = FakeStreamingAsrEngine(transcript=expected_text)
-    asr_worker = AsrWorker(
+    asr_module = WorkerTranscriptionModule(
         in_queue=asr_audio_q,
-        final_in_queue=engine.final_queue,
-        out_queue=asr_event_bus,
         capture_queue=capture_asr_q,
         storage_queue=storage_q,
         stop_event=stop_event,
-        engine=engine,
-        store_final_only=True,
+        asr_cfg=cfg.asr,
+        storage_cfg=cfg.storage,
+        _engine=engine,
     )
 
-    capture_worker = CaptureWorker(
+    capture_module = WorkerCaptureModule(
         wake_queue=wake_event_q,
         vad_queue=vad_event_q,
         asr_queue=capture_asr_q,
-        out_queue=capture_cmd_q,
+        downstream_queue=capture_cmd_q,
         storage_queue=storage_q,
         stop_event=stop_event,
-        fsm=CaptureFSM(
-            pre_roll_ms=cfg.capture.pre_roll_ms, armed_timeout_ms=cfg.capture.armed_timeout_ms
-        ),
-        transcript_extractor=InMemoryTranscriptExtractor(),
-        action_by_keyword={"alexa": "inject_text"},
-        default_action="inject_text",
+        cfg=cfg.capture,
     )
 
     tts_pcm, tts_sr = _load_wav_pcm_f32(audio_path)
@@ -229,9 +220,9 @@ def test_pipeline_end_to_end_with_gptsovits_audio(app_config: AppConfig):
     for raw in raw_chunks:
         raw_q.put(raw)
         audio_bus.run_once(timeout=0.01)
-        asr_worker._submit_audio_once()
-        asr_worker._drain_final_events()
-        capture_worker._consume_once()
+        asr_module._submit_audio_once()
+        asr_module._drain_final_events()
+        capture_module._consume_once()
 
     vad_event_q.put(
         VadEvent(
@@ -242,8 +233,8 @@ def test_pipeline_end_to_end_with_gptsovits_audio(app_config: AppConfig):
     )
 
     for _ in range(8):
-        asr_worker._drain_final_events()
-        capture_worker._consume_once()
+        asr_module._drain_final_events()
+        capture_module._consume_once()
         if not capture_cmd_q.empty():
             break
 
@@ -252,7 +243,7 @@ def test_pipeline_end_to_end_with_gptsovits_audio(app_config: AppConfig):
     assert cmd.keyword == "alexa"
     assert cmd.text == expected_text
     assert storage_q.qsize() >= 2
-    assert asr_event_bus.qsize() == 1
+    assert capture_asr_q.qsize() == 1
 
 
 def test_pipeline_end_to_end_with_gptsovits_openclaw_chain(
@@ -279,8 +270,7 @@ def test_pipeline_end_to_end_with_gptsovits_openclaw_chain(
 
     wake_event_q: queue.Queue[WakeEvent] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
     vad_event_q: queue.Queue[VadEvent] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
-    asr_event_bus: queue.Queue[AsrFinalEvent] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
-    capture_asr_q: queue.Queue[AsrFinalEvent] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
+    capture_asr_q = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
     capture_cmd_q = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
     storage_q: queue.Queue[StorageRecord] = queue.Queue(maxsize=cfg.audio_engine.max_queue_size)
 
@@ -293,30 +283,24 @@ def test_pipeline_end_to_end_with_gptsovits_openclaw_chain(
     )
 
     engine = FakeStreamingAsrEngine(transcript=transcript_text)
-    asr_worker = AsrWorker(
+    asr_module = WorkerTranscriptionModule(
         in_queue=asr_audio_q,
-        final_in_queue=engine.final_queue,
-        out_queue=asr_event_bus,
         capture_queue=capture_asr_q,
         storage_queue=storage_q,
         stop_event=stop_event,
-        engine=engine,
-        store_final_only=True,
+        asr_cfg=cfg.asr,
+        storage_cfg=cfg.storage,
+        _engine=engine,
     )
 
-    capture_worker = CaptureWorker(
+    capture_module = WorkerCaptureModule(
         wake_queue=wake_event_q,
         vad_queue=vad_event_q,
         asr_queue=capture_asr_q,
-        out_queue=capture_cmd_q,
+        downstream_queue=capture_cmd_q,
         storage_queue=storage_q,
         stop_event=stop_event,
-        fsm=CaptureFSM(
-            pre_roll_ms=cfg.capture.pre_roll_ms, armed_timeout_ms=cfg.capture.armed_timeout_ms
-        ),
-        transcript_extractor=InMemoryTranscriptExtractor(),
-        action_by_keyword={"hey_jarvis": "openclaw_agent"},
-        default_action="inject_text",
+        cfg=cfg.capture,
     )
 
     tts_pcm, tts_sr = _load_wav_pcm_f32(audio_path)
@@ -339,9 +323,9 @@ def test_pipeline_end_to_end_with_gptsovits_openclaw_chain(
     for raw in raw_chunks:
         raw_q.put(raw)
         audio_bus.run_once(timeout=0.01)
-        asr_worker._submit_audio_once()
-        asr_worker._drain_final_events()
-        capture_worker._consume_once()
+        asr_module._submit_audio_once()
+        asr_module._drain_final_events()
+        capture_module._consume_once()
 
     vad_event_q.put(
         VadEvent(
@@ -352,8 +336,8 @@ def test_pipeline_end_to_end_with_gptsovits_openclaw_chain(
     )
 
     for _ in range(8):
-        asr_worker._drain_final_events()
-        capture_worker._consume_once()
+        asr_module._drain_final_events()
+        capture_module._consume_once()
         if not capture_cmd_q.empty():
             break
 

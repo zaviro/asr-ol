@@ -2,20 +2,22 @@ from __future__ import annotations
 
 import queue
 import threading
-from typing import get_args, get_origin, get_type_hints
 
 import numpy as np
 import pytest
 
 from voxkeep.modules.transcription.application.backend_events import BackendTranscriptEvent
-from voxkeep.modules.transcription.contracts import TranscriptionBackendEvent
+from voxkeep.modules.transcription.public import (
+    WorkerTranscriptionModule,
+    _normalize_backend_event,
+)
 from voxkeep.shared.config import AppConfig
 from voxkeep.shared.events import AsrFinalEvent, ProcessedFrame
-from voxkeep.modules.transcription.infrastructure.asr_worker import AsrWorker
 
 
 class FakeEngine:
     def __init__(self) -> None:
+        self.final_queue: queue.Queue[BackendTranscriptEvent] = queue.Queue()
         self.started = 0
         self.closed = 0
         self.submitted: list[ProcessedFrame] = []
@@ -45,16 +47,6 @@ def _frame(frame_id: int = 1, ts_start: float = 1.0) -> ProcessedFrame:
     )
 
 
-def _event(*, text: str = "hello", is_final: bool = True) -> AsrFinalEvent:
-    return AsrFinalEvent(
-        segment_id="seg-1",
-        text=text,
-        start_ts=1.0,
-        end_ts=1.2,
-        is_final=is_final,
-    )
-
-
 def _backend_event(*, text: str = "hello", event_type: str = "final") -> BackendTranscriptEvent:
     return BackendTranscriptEvent(
         segment_id="seg-1",
@@ -62,6 +54,30 @@ def _backend_event(*, text: str = "hello", event_type: str = "final") -> Backend
         start_ts=1.0,
         end_ts=1.2,
         event_type=event_type,
+    )
+
+
+def _make_module(
+    *,
+    engine: FakeEngine,
+    in_q: queue.Queue[ProcessedFrame] | None = None,
+    capture_q: queue.Queue[AsrFinalEvent] | None = None,
+    storage_q: queue.Queue | None = None,
+    stop: threading.Event | None = None,
+    store_final_only: bool = True,
+    app_config: AppConfig,
+) -> WorkerTranscriptionModule:
+    from dataclasses import replace
+
+    storage_cfg = replace(app_config.storage, store_final_only=store_final_only)
+    return WorkerTranscriptionModule(
+        capture_queue=capture_q or queue.Queue(),
+        storage_queue=storage_q or queue.Queue(),
+        stop_event=stop or threading.Event(),
+        asr_cfg=app_config.asr,
+        storage_cfg=storage_cfg,
+        in_queue=in_q or queue.Queue(),
+        _engine=engine,
     )
 
 
@@ -75,142 +91,93 @@ def _backend_event(*, text: str = "hello", event_type: str = "final") -> Backend
 def test_drain_final_events_fanout_and_storage_policy(
     store_final_only: bool,
     expected_storage: int,
+    app_config: AppConfig,
 ) -> None:
-    in_q: queue.Queue[ProcessedFrame] = queue.Queue()
-    final_q: queue.Queue[BackendTranscriptEvent] = queue.Queue()
-    out_q: queue.Queue[AsrFinalEvent] = queue.Queue()
+    engine = FakeEngine()
     capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
     storage_q = queue.Queue()
-    stop = threading.Event()
-    engine = FakeEngine()
 
-    worker = AsrWorker(
-        in_queue=in_q,
-        final_in_queue=final_q,
-        out_queue=out_q,
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop,
+    module = _make_module(
         engine=engine,
+        capture_q=capture_q,
+        storage_q=storage_q,
         store_final_only=store_final_only,
+        app_config=app_config,
     )
 
     event = _backend_event(text="hello", event_type="final")
-    final_q.put(event)
+    engine.final_queue.put(event)
 
-    worker._drain_final_events()
+    module._drain_final_events()
 
-    out_event = out_q.get_nowait()
     capture_event = capture_q.get_nowait()
-    assert isinstance(out_event, AsrFinalEvent)
     assert isinstance(capture_event, AsrFinalEvent)
-    assert out_event.text == event.text
     assert capture_event.text == event.text
     assert storage_q.qsize() == expected_storage
 
 
-def test_drain_final_events_ignores_backend_partial_events() -> None:
-    in_q: queue.Queue[ProcessedFrame] = queue.Queue()
-    final_q: queue.Queue[BackendTranscriptEvent] = queue.Queue()
-    out_q: queue.Queue[AsrFinalEvent] = queue.Queue()
+def test_drain_final_events_ignores_backend_partial_events(app_config: AppConfig) -> None:
+    engine = FakeEngine()
     capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
     storage_q = queue.Queue()
-    stop = threading.Event()
-    engine = FakeEngine()
 
-    worker = AsrWorker(
-        in_queue=in_q,
-        final_in_queue=final_q,
-        out_queue=out_q,
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop,
-        engine=engine,
-        store_final_only=True,
+    module = _make_module(
+        engine=engine, capture_q=capture_q, storage_q=storage_q, app_config=app_config
     )
 
-    final_q.put(_backend_event(event_type="partial"))
+    engine.final_queue.put(_backend_event(event_type="partial"))
 
-    worker._drain_final_events()
+    module._drain_final_events()
 
-    assert out_q.empty()
     assert capture_q.empty()
     assert storage_q.empty()
 
 
-def test_drain_final_events_ignores_backend_partial_events_when_store_final_only_is_false() -> None:
-    in_q: queue.Queue[ProcessedFrame] = queue.Queue()
-    final_q: queue.Queue[BackendTranscriptEvent] = queue.Queue()
-    out_q: queue.Queue[AsrFinalEvent] = queue.Queue()
+def test_drain_final_events_ignores_backend_partial_events_when_store_final_only_is_false(
+    app_config: AppConfig,
+) -> None:
+    engine = FakeEngine()
     capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
     storage_q = queue.Queue()
-    stop = threading.Event()
-    engine = FakeEngine()
 
-    worker = AsrWorker(
-        in_queue=in_q,
-        final_in_queue=final_q,
-        out_queue=out_q,
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop,
+    module = _make_module(
         engine=engine,
+        capture_q=capture_q,
+        storage_q=storage_q,
         store_final_only=False,
+        app_config=app_config,
     )
 
-    final_q.put(_backend_event(event_type="partial"))
+    engine.final_queue.put(_backend_event(event_type="partial"))
 
-    worker._drain_final_events()
+    module._drain_final_events()
 
-    assert out_q.empty()
     assert capture_q.empty()
     assert storage_q.empty()
 
 
-def test_drain_final_events_normalizes_backend_final_events() -> None:
-    in_q: queue.Queue[ProcessedFrame] = queue.Queue()
-    final_q: queue.Queue[BackendTranscriptEvent] = queue.Queue()
-    out_q: queue.Queue[AsrFinalEvent] = queue.Queue()
+def test_drain_final_events_normalizes_backend_final_events(app_config: AppConfig) -> None:
+    engine = FakeEngine()
     capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
     storage_q = queue.Queue()
-    stop = threading.Event()
-    engine = FakeEngine()
 
-    worker = AsrWorker(
-        in_queue=in_q,
-        final_in_queue=final_q,
-        out_queue=out_q,
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop,
-        engine=engine,
-        store_final_only=True,
+    module = _make_module(
+        engine=engine, capture_q=capture_q, storage_q=storage_q, app_config=app_config
     )
 
-    final_q.put(_backend_event(text="normalized"))
+    engine.final_queue.put(_backend_event(text="normalized"))
 
-    worker._drain_final_events()
+    module._drain_final_events()
 
-    out_event = out_q.get_nowait()
     capture_event = capture_q.get_nowait()
     storage_event = storage_q.get_nowait()
 
-    assert isinstance(out_event, AsrFinalEvent)
-    assert out_event.text == "normalized"
+    assert isinstance(capture_event, AsrFinalEvent)
     assert capture_event.text == "normalized"
     assert storage_event.text == "normalized"
 
 
-def test_asr_worker_final_input_queue_is_backend_neutral() -> None:
-    hints = get_type_hints(AsrWorker.__init__)
-    final_in_queue_type = hints["final_in_queue"]
-
-    assert get_origin(final_in_queue_type) is queue.Queue
-    assert get_args(final_in_queue_type) == (TranscriptionBackendEvent,)
-
-
 def test_normalize_backend_event_accepts_structural_backend_event() -> None:
-    from voxkeep.modules.transcription.infrastructure.asr_worker import _normalize_backend_event
     from types import SimpleNamespace
 
     event = SimpleNamespace(
@@ -227,87 +194,53 @@ def test_normalize_backend_event_accepts_structural_backend_event() -> None:
     assert normalized.text == "structural"
 
 
-def test_run_submits_audio_and_closes_engine():
+def test_run_submits_audio_and_closes_engine(app_config: AppConfig):
     in_q: queue.Queue[ProcessedFrame] = queue.Queue()
-    final_q: queue.Queue[BackendTranscriptEvent] = queue.Queue()
-    out_q: queue.Queue[AsrFinalEvent] = queue.Queue()
+    engine = FakeEngine()
     capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
     storage_q = queue.Queue()
     stop = threading.Event()
-    engine = FakeEngine()
 
-    worker = AsrWorker(
-        in_queue=in_q,
-        final_in_queue=final_q,
-        out_queue=out_q,
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop,
+    module = _make_module(
         engine=engine,
-        store_final_only=True,
+        in_q=in_q,
+        capture_q=capture_q,
+        storage_q=storage_q,
+        stop=stop,
+        app_config=app_config,
     )
 
     in_q.put(_frame())
-    final_q.put(_backend_event())
+    engine.final_queue.put(_backend_event())
     stop.set()
 
-    worker._run()
+    module._run()
 
     assert len(engine.submitted) == 1
-    assert out_q.qsize() == 1
     assert capture_q.qsize() == 1
     assert storage_q.qsize() == 1
     assert engine.closed == 1
 
 
-def test_join_forwards_timeout_to_engine():
-    in_q: queue.Queue[ProcessedFrame] = queue.Queue()
-    final_q: queue.Queue[BackendTranscriptEvent] = queue.Queue()
-    out_q: queue.Queue[AsrFinalEvent] = queue.Queue()
-    capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
-    storage_q = queue.Queue()
-    stop = threading.Event()
+def test_join_forwards_timeout_to_engine(app_config: AppConfig):
     engine = FakeEngine()
 
-    worker = AsrWorker(
-        in_queue=in_q,
-        final_in_queue=final_q,
-        out_queue=out_q,
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop,
-        engine=engine,
-        store_final_only=True,
-    )
+    module = _make_module(engine=engine, app_config=app_config)
 
-    worker.join(timeout=1.5)
+    module.join(timeout=1.5)
 
     assert engine.join_timeouts == [1.5]
 
 
 def test_start_is_idempotent_for_engine(app_config: AppConfig):
-    in_q: queue.Queue[ProcessedFrame] = queue.Queue()
-    final_q: queue.Queue[BackendTranscriptEvent] = queue.Queue()
-    out_q: queue.Queue[AsrFinalEvent] = queue.Queue()
-    capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
-    storage_q = queue.Queue()
-    stop = threading.Event()
     engine = FakeEngine()
+    stop = threading.Event()
 
-    worker = AsrWorker(
-        in_queue=in_q,
-        final_in_queue=final_q,
-        out_queue=out_q,
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop,
-        engine=engine,
-        store_final_only=True,
-    )
+    module = _make_module(engine=engine, stop=stop, app_config=app_config)
 
-    worker.start()
-    worker.start()
+    module.start()
+    module.start()
     stop.set()
-    worker.join(timeout=1)
+    module.join(timeout=1)
 
     assert engine.started == 1
