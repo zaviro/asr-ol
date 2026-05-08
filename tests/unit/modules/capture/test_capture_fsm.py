@@ -49,3 +49,83 @@ def test_invalid_vad_sequence_does_not_emit_window():
     fsm.on_wake(WakeEvent(ts=1.2, score=0.9, keyword="alexa"))
     assert fsm.on_vad(VadEvent(ts=1.3, event_type="speech_end", score=0.1)) is None
     assert fsm.state == CaptureState.ARMED
+
+
+def test_pre_roll_ms_applied_to_start_ts():
+    fsm = CaptureFSM(pre_roll_ms=500, armed_timeout_ms=1000)
+
+    fsm.on_wake(WakeEvent(ts=10.0, score=0.8, keyword="alexa"))
+    assert fsm.on_vad(VadEvent(ts=10.3, event_type="speech_start", score=0.9)) is None
+    window = fsm.on_vad(VadEvent(ts=10.9, event_type="speech_end", score=0.1))
+
+    assert window is not None
+    assert window.start_ts == pytest.approx(9.8)
+    assert window.end_ts == 10.9
+
+
+def test_tick_without_timeout_does_not_reset():
+    fsm = CaptureFSM(pre_roll_ms=100, armed_timeout_ms=500)
+
+    fsm.on_wake(WakeEvent(ts=1.0, score=0.9, keyword="alexa"))
+    assert fsm.state == CaptureState.ARMED
+
+    fsm.tick(now=1.3)
+    assert fsm.state == CaptureState.ARMED
+
+
+def test_tick_with_timeout_resets_to_idle():
+    fsm = CaptureFSM(pre_roll_ms=100, armed_timeout_ms=200)
+
+    fsm.on_wake(WakeEvent(ts=1.0, score=0.9, keyword="alexa"))
+    fsm.tick(now=1.25)
+
+    assert fsm.state == CaptureState.IDLE
+
+
+def test_wake_in_capturing_state_refreshes_timeout():
+    fsm = CaptureFSM(pre_roll_ms=100, armed_timeout_ms=500)
+
+    fsm.on_wake(WakeEvent(ts=1.0, score=0.9, keyword="alexa"))
+    assert fsm.on_vad(VadEvent(ts=1.1, event_type="speech_start", score=0.9)) is None
+
+    fsm.tick(now=1.4)
+    assert fsm.state == CaptureState.CAPTURING
+
+    fsm.on_wake(WakeEvent(ts=1.5, score=0.9, keyword="hey_jarvis"))
+    assert fsm.state == CaptureState.CAPTURING
+
+    fsm.tick(now=1.8)
+    assert fsm.state == CaptureState.CAPTURING
+
+
+def test_on_vad_returns_none_in_idle_state():
+    fsm = CaptureFSM(pre_roll_ms=100, armed_timeout_ms=1000)
+
+    assert fsm.on_vad(VadEvent(ts=1.0, event_type="speech_start", score=0.9)) is None
+    assert fsm.state == CaptureState.IDLE
+
+
+def test_capture_window_has_correct_session_id():
+    fsm = CaptureFSM(pre_roll_ms=100, armed_timeout_ms=1000)
+
+    fsm.on_wake(WakeEvent(ts=1.0, score=0.9, keyword="alexa"))
+    fsm.on_vad(VadEvent(ts=1.1, event_type="speech_start", score=0.9))
+    window = fsm.on_vad(VadEvent(ts=1.8, event_type="speech_end", score=0.1))
+
+    assert window is not None
+    assert window.session_id == 1
+
+
+def test_multiple_sessions_increment_session_id():
+    fsm = CaptureFSM(pre_roll_ms=100, armed_timeout_ms=1000)
+
+    fsm.on_wake(WakeEvent(ts=1.0, score=0.9, keyword="alexa"))
+    fsm.on_vad(VadEvent(ts=1.1, event_type="speech_start", score=0.9))
+    fsm.on_vad(VadEvent(ts=1.8, event_type="speech_end", score=0.1))
+
+    fsm.on_wake(WakeEvent(ts=2.0, score=0.9, keyword="hey_jarvis"))
+    fsm.on_vad(VadEvent(ts=2.1, event_type="speech_start", score=0.9))
+    window = fsm.on_vad(VadEvent(ts=2.8, event_type="speech_end", score=0.1))
+
+    assert window is not None
+    assert window.session_id == 2

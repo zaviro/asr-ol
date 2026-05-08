@@ -31,3 +31,49 @@ def test_factory_selects_backend(
     injector = build_injector(cfg)
 
     assert isinstance(injector, expected_type)
+
+
+def test_factory_auto_selects_xdotool_when_xdg_not_set(monkeypatch, app_config: AppConfig):
+    monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
+    cfg = replace(app_config.injector, backend="auto")
+
+    injector = build_injector(cfg)
+
+    assert isinstance(injector, XdotoolInjector)
+
+
+def test_factory_auto_selects_ydotool_for_wayland(monkeypatch, app_config: AppConfig):
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    cfg = replace(app_config.injector, backend="auto")
+
+    injector = build_injector(cfg)
+
+    assert isinstance(injector, YdotoolInjector)
+
+
+def test_factory_auto_selects_xdotool_for_x11(monkeypatch, app_config: AppConfig):
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    cfg = replace(app_config.injector, backend="auto")
+
+    injector = build_injector(cfg)
+
+    assert isinstance(injector, XdotoolInjector)
+
+
+def test_factory_explicit_xdotool_backend(monkeypatch, app_config: AppConfig):
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    cfg = replace(app_config.injector, backend="xdotool")
+
+    injector = build_injector(cfg)
+
+    assert isinstance(injector, XdotoolInjector)
+
+
+def test_factory_preserves_injector_config_options(app_config: AppConfig):
+    cfg = replace(app_config.injector, backend="xdotool", xdotool_delay_ms=5, auto_enter=True)
+
+    injector = build_injector(cfg)
+
+    assert isinstance(injector, XdotoolInjector)
+    assert injector._delay_ms == 5
+    assert injector._auto_enter is True
