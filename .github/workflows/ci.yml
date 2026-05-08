@@ -3,8 +3,21 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ------------------------------------------------------------------
@@ -12,6 +25,7 @@ jobs:
   # ------------------------------------------------------------------
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: ./.github/actions/setup
@@ -39,6 +53,7 @@ jobs:
   # ------------------------------------------------------------------
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: ./.github/actions/setup
@@ -55,12 +70,35 @@ jobs:
         with:
           name: coverage
           path: coverage.xml
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # Security audit
+  # ------------------------------------------------------------------
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: ./.github/actions/setup
+
+      - name: Sync dev dependencies
+        run: make sync
+
+      - name: Detect committed private keys
+        run: uv run pre-commit run detect-private-key --all-files
+
+      - name: Audit GitHub Actions workflows (zizmor)
+        run: |
+          curl -LsSf https://github.com/woodruffw/zizmor/releases/latest/download/zizmor-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./zizmor --pedantic .github/workflows/*.yml
 
   # ------------------------------------------------------------------
   # Runtime AI validation — only when AI-related files changed
   # ------------------------------------------------------------------
   runtime-ai:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       CUDA_VISIBLE_DEVICES: ""
 
