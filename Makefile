@@ -1,4 +1,4 @@
-.PHONY: sync sync-ai setup-ai-models run-ai check-ai doctor validate-config cli-check test test-fast test-unit test-architecture test-integration test-e2e test-cov typecheck run lint fmt check precommit
+.PHONY: sync sync-ai setup-ai-models run-ai check-ai doctor validate-config cli-check test test-fast test-unit test-architecture test-integration test-e2e test-cov typecheck run lint fmt fmt-check check shellcheck actionlint precommit
 
 sync:
 	uv sync --python 3.11 --group dev
@@ -57,7 +57,16 @@ lint:
 fmt:
 	uv run --python 3.11 ruff format src tests scripts
 
+fmt-check:
+	uv run --python 3.11 ruff format --check src tests scripts
+
 check: lint test
+
+shellcheck:
+	uv run --python 3.11 pre-commit run shellcheck --all-files
+
+actionlint:
+	uv run --python 3.11 pre-commit run actionlint --all-files
 
 precommit:
 	uv run --python 3.11 pre-commit run --all-files
