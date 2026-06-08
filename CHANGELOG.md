@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Worker lifecycle protocol unified with `WorkerHandle` and `is_alive` checks.
 - Runtime health monitoring now records fatal worker exits.
 - Shared queue overflow utility `put_nowait_or_drop`.
-- End-to-end GPT-SoVITS-gated audio pipeline test.
 - Non-blocking CI quality jobs for `pyright` and coverage.
 - MIT license and contribution documentation.
 

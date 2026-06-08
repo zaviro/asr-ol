@@ -56,6 +56,7 @@ class AsrConfig:
     qwen_max_model_len: int
     max_queue_size: int
     sample_rate: int
+    vad_silence_ms: int
 
     @property
     def ws_url(self) -> str:
@@ -134,6 +135,7 @@ class AppConfig:
             "asr.qwen_gpu_memory_utilization", self.asr.qwen_gpu_memory_utilization
         )
         _require_positive_int("asr.qwen_max_model_len", self.asr.qwen_max_model_len)
+        _require_positive_int("asr.vad_silence_ms", self.asr.vad_silence_ms)
 
         backend = self.asr.backend.strip().lower()
         resolve_backend_definition(backend)

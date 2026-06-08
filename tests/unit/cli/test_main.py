@@ -217,7 +217,7 @@ def test_backend_list_command_prints_known_backends(monkeypatch, capsys) -> None
 
 
 def test_backend_current_command_prints_resolved_backend(monkeypatch, capsys) -> None:
-    cfg = types.SimpleNamespace(asr_backend="funasr_ws_managed")
+    cfg = types.SimpleNamespace(asr=types.SimpleNamespace(backend="funasr_ws_managed"))
     backend = types.SimpleNamespace(
         backend_id="funasr_ws_managed",
         display_name="FunASR WebSocket Managed",
@@ -242,7 +242,12 @@ def test_backend_current_command_prints_resolved_backend(monkeypatch, capsys) ->
 
 
 def test_backend_doctor_command_reports_backend_health(monkeypatch, capsys) -> None:
-    cfg = types.SimpleNamespace(asr_backend="funasr_ws_managed", asr_ws_url="ws://127.0.0.1:10096/")
+    cfg = types.SimpleNamespace(
+        asr=types.SimpleNamespace(
+            backend="funasr_ws_managed",
+            ws_url="ws://127.0.0.1:10096/",
+        )
+    )
     backend = types.SimpleNamespace(
         backend_id="funasr_ws_managed",
         display_name="FunASR WebSocket Managed",
@@ -283,7 +288,12 @@ def test_backend_doctor_command_reports_backend_health(monkeypatch, capsys) -> N
 
 
 def test_backend_doctor_command_returns_nonzero_for_unhealthy_backend(monkeypatch, capsys) -> None:
-    cfg = types.SimpleNamespace(asr_backend="funasr_ws_managed", asr_ws_url="ws://127.0.0.1:10096/")
+    cfg = types.SimpleNamespace(
+        asr=types.SimpleNamespace(
+            backend="funasr_ws_managed",
+            ws_url="ws://127.0.0.1:10096/",
+        )
+    )
     backend = types.SimpleNamespace(
         backend_id="funasr_ws_managed",
         display_name="FunASR WebSocket Managed",

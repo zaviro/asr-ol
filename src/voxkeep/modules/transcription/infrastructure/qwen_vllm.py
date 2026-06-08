@@ -199,11 +199,12 @@ class QwenVllmEngine(ASREngine):
             if frame.ts_end - silence_started_at < silence_threshold_s:
                 continue
 
-            await self._commit_utterance(
-                ws,
-                start_ts=utterance_start_ts,
-                end_ts=utterance_end_ts,
-            )
+            if utterance_start_ts is not None:
+                await self._commit_utterance(
+                    ws,
+                    start_ts=utterance_start_ts,
+                    end_ts=utterance_end_ts,
+                )
             utterance_start_ts = None
             utterance_end_ts = None
             silence_started_at = None

@@ -145,6 +145,7 @@ def load_config(path: str | Path) -> AppConfig:
         qwen_max_model_len=int(qwen["max_model_len"]),
         max_queue_size=int(merged["max_queue_size"]),
         sample_rate=int(merged["sample_rate"]),
+        vad_silence_ms=int(vad["silence_ms"]),
     )
 
     capture_cfg = CaptureConfig(

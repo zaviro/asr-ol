@@ -42,6 +42,7 @@ def app_config() -> AppConfig:
         qwen_max_model_len=32768,
         max_queue_size=16,
         sample_rate=16000,
+        vad_silence_ms=800,
     )
     capture = CaptureConfig(
         wake_threshold=0.5,

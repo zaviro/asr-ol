@@ -76,16 +76,3 @@ uv run --python 3.11 python -m voxkeep backend doctor --config config/config.yam
 ```
 
 `backend doctor` reports backend health classification and may return `assets_missing` before any live endpoint probe if the persisted asset state is absent.
-
-- GPT-SoVITS E2E 使用预生成夹具，首次执行：
-
-```bash
-.codex/skills/gptsovits-cli-tts/scripts/generate_test_fixtures.sh
-```
-
-- 默认 API 启动脚本：`~/workspace/gptsovits/scripts/start_api_cuda.sh`。
-- 运行 GPT-SoVITS 夹具 E2E：
-
-```bash
-VOXKEEP_RUN_GPTSOVITS_E2E=1 uv run --python 3.11 python -m pytest tests/e2e/test_pipeline_tts_audio.py -q
-```

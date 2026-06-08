@@ -26,10 +26,6 @@ dist/
 # Local manual audio fixtures
 tests/true-testvoice/*.m4a
 
-# Local GPT-SoVITS bootstrap assets
-inputs/default_reference.wav
-inputs/reference.wav
-models/
 
 # Local test coverage outputs
 .coverage

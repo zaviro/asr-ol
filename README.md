@@ -134,23 +134,7 @@ make precommit
 
 - `tests/unit` + `tests/architecture`: 默认高频反馈回路，适合日常开发。
 - `tests/integration`: 改动 worker、生命周期、runtime wiring、模块协作时再跑。
-- `tests/e2e`: 低频验收；涉及真实外部服务、桌面注入、GPT-SoVITS 夹具或完整运行链路时使用。
-
-## GPT-SoVITS 夹具 E2E
-
-- `tests/e2e/test_pipeline_tts_audio.py` 只使用预生成音频夹具，不会在测试时调用 TTS。
-- 夹具目录：`tests/fixtures/audio/gptsovits/`
-- 重新生成夹具：
-
-```bash
-.codex/skills/gptsovits-cli-tts/scripts/generate_test_fixtures.sh
-```
-
-- 仅运行 GPT-SoVITS 夹具 E2E：
-
-```bash
-VOXKEEP_RUN_GPTSOVITS_E2E=1 uv run --python 3.11 python -m pytest tests/e2e/test_pipeline_tts_audio.py -q
-```
+- `tests/e2e`: 低频验收；涉及真实外部服务、桌面注入或完整运行链路时使用。
 
 - 运行真实 OpenClaw 集成测试：
 

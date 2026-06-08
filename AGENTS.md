@@ -59,7 +59,7 @@ The repository follows a **modular-monolith** shape. Primary runtime code lives 
 - **Unit Tests** (`tests/unit/`): Pure logic, state machines, and narrow adapters. No real hardware or external services.
 - **Architecture Tests** (`tests/architecture/`): Enforce module layout and dependency rules.
 - **Integration Tests** (`tests/integration/`): Threaded pipeline behavior, worker coordination, and shutdown.
-- **E2E Tests** (`tests/e2e/`): CLI behavior and fixture-backed pipeline checks (requires `VOXKEEP_RUN_GPTSOVITS_E2E=1`).
+- **E2E Tests** (`tests/e2e/`): CLI behavior and end-to-end integration checks.
 
 ## Commit Guidelines
 Use Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`). Keep commits atomic and include relevant test/doc updates.
