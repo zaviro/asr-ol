@@ -21,6 +21,7 @@ dev = [
   "pyright>=1.1.389",
   "ruff>=0.9.0",
   "pre-commit>=4.0.1",
+  "graphifyy>=0.9.18",
 ]
 runtime-ai = [
   "openwakeword>=0.6.0",

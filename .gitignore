@@ -32,6 +32,11 @@ tests/true-testvoice/*.m4a
 coverage.xml
 
 # IDE and OS
+.codex/hooks.json
+graphify-out/cost.json
+graphify-out/cache/
+graphify-out/.graphify_python
+graphify-out/.graphify_root
 .vscode/
 .idea/
 .DS_Store
