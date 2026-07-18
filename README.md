@@ -133,6 +133,7 @@ make test
 
 ## 文档
 
+- [`docs/architecture-overview.zh-CN.md`](docs/architecture-overview.zh-CN.md)：约 400 字中文概览、源码结构图和架构流程图。
 - [`docs/architecture.md`](docs/architecture.md)：当前架构和代码阅读地图。
 - [`docs/operations.md`](docs/operations.md)：安装、运行、外部服务和故障排查。
 - [`docs/funasr-runtime-baseline.md`](docs/funasr-runtime-baseline.md)：FunASR 协议与部署基线。
