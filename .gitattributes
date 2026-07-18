@@ -1,0 +1,2 @@
+# Graphify outputs are generated project knowledge assets, not source code.
+graphify-out/** linguist-generated
