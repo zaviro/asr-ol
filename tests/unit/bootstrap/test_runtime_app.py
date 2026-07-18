@@ -510,7 +510,7 @@ def test_runtime_builds_transcription_through_module_public_api(monkeypatch, app
     assert built["storage_cfg"] is app_config.storage
 
 
-def test_runtime_builds_qwen_transcription_backend_through_public_api(
+def test_runtime_builds_funasr_transcription_backend_through_public_api(
     monkeypatch, app_config: AppConfig
 ) -> None:
     monkeypatch.setattr(
@@ -526,7 +526,7 @@ def test_runtime_builds_qwen_transcription_backend_through_public_api(
         lambda **_kwargs: _FakeStorageModule(),
     )
     built: dict[str, object] = {}
-    qwen_cfg = replace(app_config, asr=replace(app_config.asr, backend="qwen_vllm"))
+    funasr_cfg = replace(app_config, asr=replace(app_config.asr, backend="funasr_ws"))
 
     def _build_transcription_module(**kwargs):  # type: ignore[no-untyped-def]
         built.update(kwargs)
@@ -537,11 +537,11 @@ def test_runtime_builds_qwen_transcription_backend_through_public_api(
         _build_transcription_module,
     )
 
-    runtime = AppRuntime(qwen_cfg)
+    runtime = AppRuntime(funasr_cfg)
 
     assert runtime.asr_worker is not None
-    assert built["asr_cfg"] is qwen_cfg.asr
-    assert built["asr_cfg"].backend == "qwen_vllm"
+    assert built["asr_cfg"] is funasr_cfg.asr
+    assert built["asr_cfg"].backend == "funasr_ws"
 
 
 def test_run_forever_raises_when_worker_is_unhealthy():

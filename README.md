@@ -8,9 +8,10 @@
 ## 当前状态
 
 - 运行时代码已经迁移到模块化单体结构：`src/voxkeep/modules/*`、`src/voxkeep/bootstrap/`、`src/voxkeep/shared/`。
-- 仓库内提交的 `config/config.yaml` 当前默认选择 `qwen_vllm` 外部服务，目标地址是 `ws://127.0.0.1:8000/v1/realtime`。
-- `VoxKeep` 不负责启动或停止 Qwen `vLLM` 服务；Qwen 服务应由仓库外部独立管理。
-- 如果你要严格按 `config/config.yaml` 内容运行，请直接使用 CLI 或 `make run`。
+- 当前唯一支持的 ASR 后端是 Docker 中运行的 FunASR 2-pass WebSocket 服务。
+- Compose 将宿主机 `127.0.0.1:10096` 映射到 FunASR 容器的 `10095` 端口。
+- `make run` 默认确保 FunASR 容器已启动，再在宿主机运行 VoxKeep，以便访问麦克风和桌面输入接口。
+- 协议和部署事实记录在 [`docs/funasr-runtime-baseline.md`](docs/funasr-runtime-baseline.md)。
 
 ## 快速开始
 
@@ -23,26 +24,26 @@ make lint
 make typecheck
 ```
 
-### 按当前 `qwen_vllm` 配置运行
+### 按当前 FunASR 配置运行
 
-1. 在仓库外部先启动本地 Qwen `vLLM` ASR 服务。
-2. 准备运行时依赖和唤醒模型：
+1. 准备运行时依赖和唤醒模型：
 
 ```bash
 make sync-ai
 make setup-ai-models
 ```
 
-3. 做环境和配置检查：
+2. 启动 FunASR，并做环境和配置检查：
 
 ```bash
+make funasr-up
 make doctor
 make validate-config
 uv run --python 3.11 python -m voxkeep backend current --config config/config.yaml
 uv run --python 3.11 python -m voxkeep backend doctor --config config/config.yaml
 ```
 
-4. 直接运行 VoxKeep：
+3. 运行 VoxKeep：
 
 ```bash
 make run
@@ -51,6 +52,8 @@ make run
 说明：
 
 - `make doctor` 负责检查会话类型、音频源、wake/VAD 依赖、注入工具和当前配置对应的 WebSocket ASR 健康状态。
+- 第一次启动 FunASR 时 Docker 会拉取镜像并在命名卷中初始化模型，可能需要数分钟；默认启动等待上限为 600 秒。
+- 使用仓库外的 FunASR 服务时，可设置 `VOXKEEP_MANAGE_FUNASR=0`，并通过 `VOXKEEP_ASR_EXTERNAL_HOST/PORT` 指定地址。
 - `backend current` 用来确认配置最终解析出的后端。
 - `backend doctor` 会输出当前后端的健康分类；如果资产状态缺失或服务不可用，会非零退出。
 
@@ -98,11 +101,10 @@ tests/
 
 当前主要配置文件是 `config/config.yaml`。重点字段：
 
-- `asr.backend`: 当前仅支持 `qwen_vllm`。
-- `asr.mode`: `external`。
+- `asr.backend`: 当前仅支持 `funasr_ws`。
 - `asr.external.*`: 当前活动 WebSocket ASR 服务的地址。
 - `asr.runtime.*`: ASR 连接重试参数。
-- `asr.qwen.*`: Qwen `vLLM` 相关参数。
+- `asr.funasr.*`: FunASR 2-pass 分块、回看与 ITN 参数。
 - `wake.rules`: 唤醒词到动作的路由规则。
 - `injector.backend`: `auto`、`xdotool`、`ydotool`。
 - `actions.openclaw_agent`: `openclaw agent` 的命令模板和超时。
@@ -114,6 +116,9 @@ make sync
 make sync-ai
 make setup-ai-models
 make check-ai
+make funasr-up
+make funasr-down
+make funasr-logs
 make doctor
 make validate-config
 make cli-check

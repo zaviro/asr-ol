@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -112,7 +112,7 @@ def load_config(path: str | Path) -> AppConfig:
     asr = merged.get("asr", {})
     external = asr.get("external", {})
     asr_runtime = asr.get("runtime", {})
-    qwen = asr.get("qwen", {})
+    funasr = asr.get("funasr", {})
 
     openclaw = actions.get("openclaw_agent", {})
     command = tuple(str(part) for part in openclaw.get("command", []))
@@ -130,22 +130,23 @@ def load_config(path: str | Path) -> AppConfig:
 
     asr_cfg = AsrConfig(
         backend=str(asr["backend"]),
-        mode=str(asr["mode"]),
         external_host=str(external["host"]),
         external_port=int(external["port"]),
         external_path=str(external["path"]),
         use_ssl=bool(external["use_ssl"]),
         reconnect_initial_s=reconnect_initial_s,
         reconnect_max_s=reconnect_max_s,
-        runtime_reconnect_initial_s=reconnect_initial_s,
-        runtime_reconnect_max_s=reconnect_max_s,
-        qwen_model=str(qwen["model"]),
-        qwen_realtime=bool(qwen["realtime"]),
-        qwen_gpu_memory_utilization=float(qwen["gpu_memory_utilization"]),
-        qwen_max_model_len=int(qwen["max_model_len"]),
+        funasr_mode=str(funasr["mode"]),
+        funasr_chunk_size=cast(
+            tuple[int, int, int],
+            tuple(int(value) for value in funasr["chunk_size"]),
+        ),
+        funasr_chunk_interval=int(funasr["chunk_interval"]),
+        funasr_encoder_chunk_look_back=int(funasr["encoder_chunk_look_back"]),
+        funasr_decoder_chunk_look_back=int(funasr["decoder_chunk_look_back"]),
+        funasr_itn=bool(funasr["itn"]),
         max_queue_size=int(merged["max_queue_size"]),
         sample_rate=int(merged["sample_rate"]),
-        vad_silence_ms=int(vad["silence_ms"]),
     )
 
     capture_cfg = CaptureConfig(

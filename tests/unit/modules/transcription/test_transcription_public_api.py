@@ -209,35 +209,35 @@ def test_build_asr_engine_exposes_backend_dispatch_registry() -> None:
     builders = getattr(engine_factory, "BACKEND_ENGINE_BUILDERS", None)
 
     assert builders is not None
-    assert set(builders) >= {"qwen_vllm"}
+    assert set(builders) == {"funasr_ws"}
 
 
 def test_build_asr_engine_uses_backend_specific_constructor(
     monkeypatch, app_config: AppConfig
 ) -> None:
     engine_factory = import_module("voxkeep.modules.transcription.infrastructure.engine_factory")
-    sentinel_qwen = object()
+    sentinel_funasr = object()
     monkeypatch.setitem(
-        engine_factory.BACKEND_ENGINE_BUILDERS, "qwen_vllm", lambda **_: sentinel_qwen
+        engine_factory.BACKEND_ENGINE_BUILDERS, "funasr_ws", lambda **_: sentinel_funasr
     )
 
     from dataclasses import replace
 
-    qwen = engine_factory.build_asr_engine(
-        cfg=replace(app_config.asr, backend="qwen_vllm"),
+    funasr = engine_factory.build_asr_engine(
+        cfg=replace(app_config.asr, backend="funasr_ws"),
         stop_event=threading.Event(),
     )
 
-    assert qwen is sentinel_qwen
+    assert funasr is sentinel_funasr
 
 
-def test_build_transcription_module_supports_qwen_backend(
+def test_build_transcription_module_supports_funasr_backend(
     monkeypatch, app_config: AppConfig
 ) -> None:
     fake_engine = _FakeEngine()
     from dataclasses import replace
 
-    new_asr = replace(app_config.asr, backend="qwen_vllm")
+    new_asr = replace(app_config.asr, backend="funasr_ws")
     monkeypatch.setattr(
         "voxkeep.modules.transcription.public.build_asr_engine",
         lambda cfg, stop_event: fake_engine,

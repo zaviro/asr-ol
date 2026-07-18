@@ -1,4 +1,4 @@
-.PHONY: sync sync-ai setup-ai-models run-ai check-ai doctor validate-config cli-check test test-fast test-unit test-architecture test-integration test-e2e test-cov typecheck run lint fmt fmt-check check shellcheck actionlint precommit
+.PHONY: sync sync-ai setup-ai-models run-ai check-ai funasr-up funasr-down funasr-logs doctor validate-config cli-check test test-fast test-unit test-architecture test-integration test-e2e test-cov typecheck run lint fmt fmt-check check shellcheck actionlint precommit
 
 sync:
 	uv sync --python 3.11 --group dev
@@ -10,10 +10,19 @@ setup-ai-models: sync-ai
 	uv run --python 3.11 python scripts/setup_openwakeword_models.py
 
 run-ai: setup-ai-models
-	uv run --python 3.11 python -m voxkeep run --config config/config.yaml
+	./scripts/run_local.sh config/config.yaml
 
 check-ai: setup-ai-models
 	uv run --python 3.11 python scripts/check_runtime_ai.py
+
+funasr-up:
+	docker compose up -d funasr
+
+funasr-down:
+	docker compose down
+
+funasr-logs:
+	docker compose logs --tail=200 -f funasr
 
 doctor:
 	uv run --python 3.11 python -m voxkeep doctor
@@ -49,7 +58,7 @@ typecheck:
 	uv run --python 3.11 pyright
 
 run:
-	uv run --python 3.11 python -m voxkeep run --config config/config.yaml
+	./scripts/run_local.sh config/config.yaml
 
 lint:
 	uv run --python 3.11 ruff check src tests scripts

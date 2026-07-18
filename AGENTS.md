@@ -31,14 +31,15 @@ The repository follows a **modular-monolith** shape. Primary runtime code lives 
 ## Environment Assumptions
 - Use `uv run --python 3.11 ...` for all Python commands.
 - `make sync-ai` is required for local AI behavior (includes `openwakeword`, `silero-vad`, `torch`).
-- Preferred ASR path is **`qwen_vllm`** against an externally managed local service (default: `ws://127.0.0.1:8000/v1/realtime`).
-- VoxKeep does not manage the Qwen `vLLM` service lifecycle.
-- FunASR is no longer supported or managed by VoxKeep.
+- The supported ASR path is **`funasr_ws`** against the repository-managed Docker service (default: `ws://127.0.0.1:10096/`).
+- The default FunASR image listens on container port `10095`; Compose publishes it as host port `10096`.
+- Qwen ASR is no longer supported; do not restore Qwen-specific runtime code or configuration.
 - Session type impacts injection: `xdotool` for X11, `ydotool` for Wayland.
 
 ## Build, Test, and Development Commands
 - `make sync-ai`: install dev and runtime AI dependencies.
 - `make setup-ai-models`: download and validate openwakeword model assets.
+- `make funasr-up` / `make funasr-down`: manage the FunASR Docker service.
 - `make doctor`: run environment diagnostics.
 - `make validate-config`: validate `config/config.yaml`.
 - `make test-fast`: run unit and architecture tests (default feedback loop).

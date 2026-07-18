@@ -6,24 +6,24 @@ from voxkeep.shared.asr_backends import BUILTIN_BACKENDS
 from voxkeep.shared.asr_backends import resolve_backend_definition
 
 
-def test_builtin_registry_contains_qwen_vllm() -> None:
-    assert "qwen_vllm" in BUILTIN_BACKENDS
-    backend = resolve_backend_definition("qwen_vllm")
+def test_builtin_registry_contains_funasr_ws() -> None:
+    assert "funasr_ws" in BUILTIN_BACKENDS
+    backend = resolve_backend_definition("funasr_ws")
 
-    assert backend.kind == "external_service"
+    assert backend.kind == "managed_service"
     assert backend.transport == "websocket"
 
 
 def test_resolve_backend_definition_normalizes_input() -> None:
-    backend = resolve_backend_definition("QWEN_VLLM")
+    backend = resolve_backend_definition("FUNASR_WS")
 
-    assert backend.backend_id == "qwen_vllm"
+    assert backend.backend_id == "funasr_ws"
 
 
 def test_resolve_backend_definition_strips_whitespace() -> None:
-    backend = resolve_backend_definition("  qwen_vllm  ")
+    backend = resolve_backend_definition("  funasr_ws  ")
 
-    assert backend.backend_id == "qwen_vllm"
+    assert backend.backend_id == "funasr_ws"
 
 
 def test_resolve_backend_definition_raises_for_unknown_backend() -> None:
@@ -37,7 +37,7 @@ def test_resolve_backend_definition_raises_for_empty_string() -> None:
 
 
 def test_builtin_backend_has_correct_attributes() -> None:
-    backend = resolve_backend_definition("qwen_vllm")
+    backend = resolve_backend_definition("funasr_ws")
 
-    assert backend.display_name == "Qwen3-ASR vLLM External"
-    assert backend.managed_by_default is False
+    assert backend.display_name == "FunASR 2-pass WebSocket"
+    assert backend.managed_by_default is True

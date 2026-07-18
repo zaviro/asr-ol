@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import shutil
-from dataclasses import replace
 
 import pytest
 
@@ -26,23 +25,21 @@ def app_config() -> AppConfig:
         max_queue_size=16,
     )
     asr = AsrConfig(
-        backend="qwen_vllm",
-        mode="external",
+        backend="funasr_ws",
         external_host="127.0.0.1",
         external_port=10096,
         external_path="/",
         use_ssl=False,
         reconnect_initial_s=1.0,
         reconnect_max_s=30.0,
-        runtime_reconnect_initial_s=1.0,
-        runtime_reconnect_max_s=30.0,
-        qwen_model="Qwen/Qwen3-ASR-1.7B",
-        qwen_realtime=True,
-        qwen_gpu_memory_utilization=0.65,
-        qwen_max_model_len=32768,
+        funasr_mode="2pass",
+        funasr_chunk_size=(5, 10, 5),
+        funasr_chunk_interval=10,
+        funasr_encoder_chunk_look_back=4,
+        funasr_decoder_chunk_look_back=1,
+        funasr_itn=True,
         max_queue_size=16,
         sample_rate=16000,
-        vad_silence_ms=800,
     )
     capture = CaptureConfig(
         wake_threshold=0.5,
@@ -88,19 +85,6 @@ def app_config() -> AppConfig:
         injector=injector,
         log_level="INFO",
     )
-
-
-@pytest.fixture
-def qwen_app_config(app_config: AppConfig) -> AppConfig:
-    new_asr = replace(
-        app_config.asr,
-        backend="qwen_vllm",
-        external_port=8000,
-        external_path="/v1/realtime",
-        runtime_reconnect_initial_s=1.5,
-        runtime_reconnect_max_s=12.0,
-    )
-    return replace(app_config, asr=new_asr)
 
 
 @pytest.fixture

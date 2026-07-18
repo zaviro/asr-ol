@@ -189,16 +189,12 @@ def _cmd_backend_doctor(args: argparse.Namespace) -> int:
     if backend.transport != "websocket":
         raise ValueError(f"unsupported transport for backend doctor: {backend.transport}")
 
-    assets_state = read_assets_state()
-    assets_status = _asset_status_from_state(assets_state, backend.backend_id)
-    tcp_ok, handshake_ok, detail = (False, None, f"assets_status={assets_status}")
-    if assets_status == "ok":
-        tcp_ok, handshake_ok, detail = probe_websocket_handshake(cfg.asr.ws_url)
+    tcp_ok, handshake_ok, detail = probe_websocket_handshake(cfg.asr.ws_url)
 
     status = classify_backend_health(
         tcp_ok=tcp_ok,
         handshake_ok=handshake_ok,
-        assets_status=assets_status,
+        assets_status="ok",
         detail=detail,
     )
     _print_key_values(

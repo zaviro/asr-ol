@@ -9,8 +9,7 @@ DEFAULTS = {
     "frame_ms": 32,
     "max_queue_size": 512,
     "asr": {
-        "backend": "qwen_vllm",
-        "mode": "external",
+        "backend": "funasr_ws",
         "external": {
             "host": "127.0.0.1",
             "port": 10096,
@@ -21,11 +20,13 @@ DEFAULTS = {
             "reconnect_initial_s": 1.0,
             "reconnect_max_s": 30.0,
         },
-        "qwen": {
-            "model": "Qwen/Qwen3-ASR-1.7B",
-            "realtime": True,
-            "gpu_memory_utilization": 0.65,
-            "max_model_len": 32768,
+        "funasr": {
+            "mode": "2pass",
+            "chunk_size": [5, 10, 5],
+            "chunk_interval": 10,
+            "encoder_chunk_look_back": 4,
+            "decoder_chunk_look_back": 1,
+            "itn": True,
         },
     },
     "wake": {

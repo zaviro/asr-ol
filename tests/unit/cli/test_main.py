@@ -176,7 +176,7 @@ def test_build_arg_parser_registers_backend_and_asset_groups() -> None:
     backend_list_args = parser.parse_args(["backend", "list"])
     backend_current_args = parser.parse_args(["backend", "current"])
     backend_doctor_args = parser.parse_args(["backend", "doctor"])
-    asset_status_args = parser.parse_args(["asset", "status", "funasr_ws_managed"])
+    asset_status_args = parser.parse_args(["asset", "status", "funasr_ws"])
 
     assert backend_list_args.func is cli_main._cmd_backend_list
     assert backend_current_args.func is cli_main._cmd_backend_current
@@ -189,16 +189,9 @@ def test_backend_list_command_prints_known_backends(monkeypatch, capsys) -> None
         cli_main,
         "BUILTIN_BACKENDS",
         {
-            "funasr_ws_external": types.SimpleNamespace(
-                backend_id="funasr_ws_external",
-                display_name="FunASR WebSocket External",
-                kind="external_service",
-                transport="websocket",
-                managed_by_default=False,
-            ),
-            "funasr_ws_managed": types.SimpleNamespace(
-                backend_id="funasr_ws_managed",
-                display_name="FunASR WebSocket Managed",
+            "funasr_ws": types.SimpleNamespace(
+                backend_id="funasr_ws",
+                display_name="FunASR 2-pass WebSocket",
                 kind="managed_service",
                 transport="websocket",
                 managed_by_default=True,
@@ -211,16 +204,15 @@ def test_backend_list_command_prints_known_backends(monkeypatch, capsys) -> None
 
     assert code == cli_main.EXIT_OK
     assert captured.out.splitlines() == [
-        "funasr_ws_external\tFunASR WebSocket External\texternal_service\twebsocket\tmanaged_by_default=false",
-        "funasr_ws_managed\tFunASR WebSocket Managed\tmanaged_service\twebsocket\tmanaged_by_default=true",
+        "funasr_ws\tFunASR 2-pass WebSocket\tmanaged_service\twebsocket\tmanaged_by_default=true",
     ]
 
 
 def test_backend_current_command_prints_resolved_backend(monkeypatch, capsys) -> None:
-    cfg = types.SimpleNamespace(asr=types.SimpleNamespace(backend="funasr_ws_managed"))
+    cfg = types.SimpleNamespace(asr=types.SimpleNamespace(backend="funasr_ws"))
     backend = types.SimpleNamespace(
-        backend_id="funasr_ws_managed",
-        display_name="FunASR WebSocket Managed",
+        backend_id="funasr_ws",
+        display_name="FunASR 2-pass WebSocket",
         kind="managed_service",
         transport="websocket",
         managed_by_default=True,
@@ -233,8 +225,8 @@ def test_backend_current_command_prints_resolved_backend(monkeypatch, capsys) ->
 
     assert code == cli_main.EXIT_OK
     assert captured.out.splitlines() == [
-        "backend_id=funasr_ws_managed",
-        "display_name=FunASR WebSocket Managed",
+        "backend_id=funasr_ws",
+        "display_name=FunASR 2-pass WebSocket",
         "kind=managed_service",
         "transport=websocket",
         "managed_by_default=true",
@@ -244,22 +236,19 @@ def test_backend_current_command_prints_resolved_backend(monkeypatch, capsys) ->
 def test_backend_doctor_command_reports_backend_health(monkeypatch, capsys) -> None:
     cfg = types.SimpleNamespace(
         asr=types.SimpleNamespace(
-            backend="funasr_ws_managed",
+            backend="funasr_ws",
             ws_url="ws://127.0.0.1:10096/",
         )
     )
     backend = types.SimpleNamespace(
-        backend_id="funasr_ws_managed",
-        display_name="FunASR WebSocket Managed",
+        backend_id="funasr_ws",
+        display_name="FunASR 2-pass WebSocket",
         kind="managed_service",
         transport="websocket",
         managed_by_default=True,
     )
     monkeypatch.setattr(cli_main, "load_config", lambda _path: cfg)
     monkeypatch.setattr(cli_main, "resolve_backend_definition", lambda _backend_id: backend)
-    monkeypatch.setattr(
-        cli_main, "read_assets_state", lambda: {"funasr_ws_managed": {"status": "ok"}}
-    )
     monkeypatch.setattr(
         cli_main,
         "probe_websocket_handshake",
@@ -280,7 +269,7 @@ def test_backend_doctor_command_reports_backend_health(monkeypatch, capsys) -> N
 
     assert code == cli_main.EXIT_OK
     assert captured.out.splitlines() == [
-        "backend_id=funasr_ws_managed",
+        "backend_id=funasr_ws",
         "state=healthy",
         "reason=ok",
         "detail=websocket handshake ok: ws://127.0.0.1:10096/",
@@ -290,22 +279,19 @@ def test_backend_doctor_command_reports_backend_health(monkeypatch, capsys) -> N
 def test_backend_doctor_command_returns_nonzero_for_unhealthy_backend(monkeypatch, capsys) -> None:
     cfg = types.SimpleNamespace(
         asr=types.SimpleNamespace(
-            backend="funasr_ws_managed",
+            backend="funasr_ws",
             ws_url="ws://127.0.0.1:10096/",
         )
     )
     backend = types.SimpleNamespace(
-        backend_id="funasr_ws_managed",
-        display_name="FunASR WebSocket Managed",
+        backend_id="funasr_ws",
+        display_name="FunASR 2-pass WebSocket",
         kind="managed_service",
         transport="websocket",
         managed_by_default=True,
     )
     monkeypatch.setattr(cli_main, "load_config", lambda _path: cfg)
     monkeypatch.setattr(cli_main, "resolve_backend_definition", lambda _backend_id: backend)
-    monkeypatch.setattr(
-        cli_main, "read_assets_state", lambda: {"funasr_ws_managed": {"status": "ok"}}
-    )
     monkeypatch.setattr(
         cli_main,
         "probe_websocket_handshake",
@@ -326,7 +312,7 @@ def test_backend_doctor_command_returns_nonzero_for_unhealthy_backend(monkeypatc
 
     assert code == cli_main.EXIT_COMMAND_FAILURE
     assert captured.out.splitlines() == [
-        "backend_id=funasr_ws_managed",
+        "backend_id=funasr_ws",
         "state=degraded",
         "reason=handshake_failed",
         "detail=handshake failed",
@@ -337,15 +323,15 @@ def test_main_asset_status_returns_zero_for_installed_backend(monkeypatch, capsy
     monkeypatch.setattr(
         cli_main,
         "read_assets_state",
-        lambda: {"funasr_ws_managed": {"installed": True}},
+        lambda: {"funasr_ws": {"installed": True}},
     )
 
-    code = cli_main.main(["asset", "status", "funasr_ws_managed"])
+    code = cli_main.main(["asset", "status", "funasr_ws"])
     captured = capsys.readouterr()
 
     assert code == cli_main.EXIT_OK
     assert captured.out.splitlines() == [
-        "backend_id=funasr_ws_managed",
+        "backend_id=funasr_ws",
         "status=ok",
     ]
 
@@ -353,12 +339,12 @@ def test_main_asset_status_returns_zero_for_installed_backend(monkeypatch, capsy
 def test_main_asset_status_returns_nonzero_for_missing_backend(monkeypatch, capsys) -> None:
     monkeypatch.setattr(cli_main, "read_assets_state", lambda: {})
 
-    code = cli_main.main(["asset", "status", "funasr_ws_managed"])
+    code = cli_main.main(["asset", "status", "funasr_ws"])
     captured = capsys.readouterr()
 
     assert code == cli_main.EXIT_COMMAND_FAILURE
     assert captured.out.splitlines() == [
-        "backend_id=funasr_ws_managed",
+        "backend_id=funasr_ws",
         "status=missing",
     ]
 
@@ -367,14 +353,14 @@ def test_main_asset_status_returns_nonzero_for_invalid_backend_state(monkeypatch
     monkeypatch.setattr(
         cli_main,
         "read_assets_state",
-        lambda: {"funasr_ws_managed": ["broken"]},
+        lambda: {"funasr_ws": ["broken"]},
     )
 
-    code = cli_main.main(["asset", "status", "funasr_ws_managed"])
+    code = cli_main.main(["asset", "status", "funasr_ws"])
     captured = capsys.readouterr()
 
     assert code == cli_main.EXIT_COMMAND_FAILURE
     assert captured.out.splitlines() == [
-        "backend_id=funasr_ws_managed",
+        "backend_id=funasr_ws",
         "status=invalid",
     ]
