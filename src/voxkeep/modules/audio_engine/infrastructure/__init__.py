@@ -1,1 +1,1 @@
-"""Runtime infrastructure adapters."""
+"""Audio-engine infrastructure adapters."""

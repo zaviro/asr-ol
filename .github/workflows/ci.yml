@@ -24,11 +24,18 @@ jobs:
   # Fast feedback: lint, format, typecheck, shellcheck, actionlint
   # ------------------------------------------------------------------
   check:
+    name: Quality checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - uses: ./.github/actions/setup
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python and uv
+        uses: ./.github/actions/setup
 
       - name: Sync dev dependencies
         run: make sync
@@ -52,11 +59,18 @@ jobs:
   # Tests with coverage
   # ------------------------------------------------------------------
   test:
+    name: Test suite
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - uses: ./.github/actions/setup
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python and uv
+        uses: ./.github/actions/setup
 
       - name: Sync dev dependencies
         run: make sync
@@ -66,7 +80,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage
           path: coverage.xml
@@ -76,11 +90,18 @@ jobs:
   # Security audit
   # ------------------------------------------------------------------
   security:
+    name: Security audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - uses: ./.github/actions/setup
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python and uv
+        uses: ./.github/actions/setup
 
       - name: Sync dev dependencies
         run: make sync
@@ -97,19 +118,26 @@ jobs:
   # Runtime AI validation — only when AI-related files changed
   # ------------------------------------------------------------------
   runtime-ai:
+    name: Runtime AI validation
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       CUDA_VISIBLE_DEVICES: ""
 
     steps:
-      - uses: ./.github/actions/setup
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python and uv
+        uses: ./.github/actions/setup
 
       - name: Detect AI-related changes
         id: changes
         run: |
           if git diff --name-only origin/main...HEAD 2>/dev/null |
-             grep -qE '^(src/voxkeep/infra/(wake|vad|audio)/|scripts/(setup_openwakeword|check_runtime_ai)|pyproject\.toml|\.github/workflows/ci\.yml)'; then
+             grep -qE '^(src/voxkeep/modules/(audio_engine|capture)/|scripts/(setup_openwakeword|check_runtime_ai)|pyproject\.toml|\.github/workflows/ci\.yml)'; then
             echo "ai=true" >> "$GITHUB_OUTPUT"
           else
             echo "ai=false" >> "$GITHUB_OUTPUT"

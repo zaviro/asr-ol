@@ -14,7 +14,7 @@ The repository follows a **modular-monolith** shape. Primary runtime code lives 
 - `modules/audio_engine/`: audio capture, preprocessing, audio bus, and audio engine infrastructure.
 - `shared/`: shared config, types, logging, and queue utilities.
 - `bootstrap/`: top-level runtime wiring and lifecycle orchestration.
-- `api/` and `cli/`: external entrypoints and operator-facing APIs.
+- `cli/`: operator-facing entrypoint and commands.
 
 **Note**: Legacy runtime packages `core/`, `infra/`, and `services/` are retired. Do not add new code there.
 
@@ -31,14 +31,15 @@ The repository follows a **modular-monolith** shape. Primary runtime code lives 
 ## Environment Assumptions
 - Use `uv run --python 3.11 ...` for all Python commands.
 - `make sync-ai` is required for local AI behavior (includes `openwakeword`, `silero-vad`, `torch`).
-- Preferred ASR path is **`qwen_vllm`** against an externally managed local service (default: `ws://127.0.0.1:8000/v1/realtime`).
-- VoxKeep does not manage the Qwen `vLLM` service lifecycle.
-- FunASR is no longer supported or managed by VoxKeep.
-- Session type impacts injection: `xdotool` for X11, `ydotool` for Wayland.
+- The supported ASR backend is **`funasr_ws`**. It targets the repository-managed Docker service by default (`ws://127.0.0.1:10096/`) and may also use a compatible external FunASR service.
+- The default FunASR image listens on container port `10095`; Compose publishes it as host port `10096`.
+- Qwen ASR is no longer supported; do not restore Qwen-specific runtime code or configuration.
+- With `injector.backend: auto`, X11 selects `xdotool` and Wayland selects `ydotool`.
 
 ## Build, Test, and Development Commands
 - `make sync-ai`: install dev and runtime AI dependencies.
 - `make setup-ai-models`: download and validate openwakeword model assets.
+- `make funasr-up` / `make funasr-down`: manage the FunASR Docker service.
 - `make doctor`: run environment diagnostics.
 - `make validate-config`: validate `config/config.yaml`.
 - `make test-fast`: run unit and architecture tests (default feedback loop).
@@ -59,7 +60,20 @@ The repository follows a **modular-monolith** shape. Primary runtime code lives 
 - **Unit Tests** (`tests/unit/`): Pure logic, state machines, and narrow adapters. No real hardware or external services.
 - **Architecture Tests** (`tests/architecture/`): Enforce module layout and dependency rules.
 - **Integration Tests** (`tests/integration/`): Threaded pipeline behavior, worker coordination, and shutdown.
-- **E2E Tests** (`tests/e2e/`): CLI behavior and fixture-backed pipeline checks (requires `VOXKEEP_RUN_GPTSOVITS_E2E=1`).
+- **E2E Tests** (`tests/e2e/`): CLI behavior and end-to-end integration checks.
 
 ## Commit Guidelines
 Use Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`). Keep commits atomic and include relevant test/doc updates.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

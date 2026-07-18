@@ -8,7 +8,7 @@ import threading
 from typing import Any, Protocol
 
 import numpy as np
-from voxkeep.shared.events import ProcessedFrame, VadEvent
+from voxkeep.shared.events import CaptureEvent, ProcessedFrame, VadEvent
 from voxkeep.shared.queue_utils import put_nowait_or_drop
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ class SileroVadWorker:
     def __init__(
         self,
         in_queue: queue.Queue[ProcessedFrame],
-        out_queue: queue.Queue[VadEvent],
+        out_queue: queue.Queue[CaptureEvent],
         stop_event: threading.Event,
         speech_threshold: float,
         silence_ms: int,

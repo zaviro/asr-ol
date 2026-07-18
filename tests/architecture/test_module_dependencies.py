@@ -43,10 +43,29 @@ def _find_import_violations() -> list[str]:
             imported_module = imported_parts[2] if len(imported_parts) > 2 else None
             if imported_module == current_module:
                 continue
-            if ".public" not in imported:
+            if len(imported_parts) != 4 or imported_parts[3] != "public":
+                violations.append(f"{module_name} -> {imported}")
+    return sorted(violations)
+
+
+def _find_bootstrap_module_import_violations() -> list[str]:
+    """Find bootstrap imports that bypass a module's public boundary."""
+    violations: list[str] = []
+    for path in (SRC_ROOT / "bootstrap").rglob("*.py"):
+        module_name = _module_name_for(path)
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for imported in _imported_names(tree):
+            if not imported.startswith("voxkeep.modules."):
+                continue
+            parts = imported.split(".")
+            if len(parts) != 4 or parts[3] != "public":
                 violations.append(f"{module_name} -> {imported}")
     return sorted(violations)
 
 
 def test_module_boundaries_only_allow_public_cross_module_imports() -> None:
     assert _find_import_violations() == []
+
+
+def test_bootstrap_only_imports_module_public_apis() -> None:
+    assert _find_bootstrap_module_import_violations() == []

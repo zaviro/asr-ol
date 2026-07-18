@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1180" viewBox="0 0 1800 1180" role="img" aria-labelledby="title desc">
+  <title id="title">VoxKeep 源文件结构图</title>
+  <desc id="desc">展示 src/voxkeep 下的入口、组合根、共享层以及五个业务模块的公开接口与内部实现。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08111f"/>
+      <stop offset="1" stop-color="#101a31"/>
+    </linearGradient>
+    <linearGradient id="rootFill" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#172554"/>
+      <stop offset="1" stop-color="#0f3a5f"/>
+    </linearGradient>
+    <style>
+      .sans { font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif; }
+      .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+      .title { fill: #f8fafc; font-size: 42px; font-weight: 700; }
+      .subtitle { fill: #94a3b8; font-size: 19px; }
+      .root { fill: #f8fafc; font-size: 29px; font-weight: 700; }
+      .root-note { fill: #bfdbfe; font-size: 18px; }
+      .section { fill: #e2e8f0; font-size: 24px; font-weight: 700; }
+      .card-title { fill: #f8fafc; font-size: 23px; font-weight: 700; }
+      .card-role { fill: #94a3b8; font-size: 16px; }
+      .file { fill: #dbeafe; font-size: 17px; }
+      .file-dim { fill: #94a3b8; font-size: 16px; }
+      .public { fill: #bbf7d0; font-size: 16px; font-weight: 700; }
+      .rule { fill: #cbd5e1; font-size: 17px; }
+      .badge { fill: #dbeafe; font-size: 15px; font-weight: 700; letter-spacing: .5px; }
+      .connector { fill: none; stroke: #52647e; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .card { fill: #111c31; stroke: #2e405c; stroke-width: 2; }
+      .module-box { fill: #0d1729; stroke: #334a6d; stroke-width: 2; stroke-dasharray: 8 7; }
+      .divider { stroke: #293b55; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1180" fill="url(#bg)"/>
+  <circle cx="1680" cy="78" r="155" fill="#0ea5e9" opacity=".055"/>
+  <circle cx="90" cy="1110" r="210" fill="#22c55e" opacity=".04"/>
+
+  <text x="70" y="70" class="sans title">VoxKeep 源文件结构</text>
+  <text x="70" y="105" class="sans subtitle">模块化单体 · src layout · 公开边界优先的阅读地图</text>
+  <g transform="translate(1370 48)">
+    <rect width="110" height="34" rx="17" fill="#172554" stroke="#31558a"/>
+    <text x="55" y="23" text-anchor="middle" class="sans badge">PYTHON 3.11</text>
+    <rect x="124" width="126" height="34" rx="17" fill="#123024" stroke="#276749"/>
+    <text x="187" y="23" text-anchor="middle" class="sans badge" fill="#bbf7d0">PUBLIC API</text>
+    <rect x="264" width="96" height="34" rx="17" fill="#312e47" stroke="#5b5681"/>
+    <text x="312" y="23" text-anchor="middle" class="sans badge" fill="#ddd6fe">THREADS</text>
+  </g>
+
+  <rect x="70" y="145" width="1660" height="92" rx="20" fill="url(#rootFill)" stroke="#3b82f6" stroke-width="2"/>
+  <rect x="91" y="168" width="38" height="38" rx="9" fill="#38bdf8"/>
+  <path d="M101 179h8l4 4h7v14h-19z" fill="#082f49"/>
+  <text x="150" y="184" class="mono root">src/voxkeep/</text>
+  <text x="150" y="214" class="sans root-note">产品运行时代码；退役的 core / infra / services 不再作为顶层命名空间</text>
+
+  <path class="connector" d="M900 237v32M250 269h1300M250 269v20M650 269v20M1300 269v20M900 269v235"/>
+
+  <!-- Entry points -->
+  <rect x="70" y="289" width="360" height="190" rx="18" class="card"/>
+  <rect x="70" y="289" width="7" height="190" rx="3.5" fill="#38bdf8"/>
+  <text x="96" y="327" class="sans card-title">入口</text>
+  <text x="96" y="352" class="sans card-role">包入口与操作员 CLI</text>
+  <line x1="96" y1="368" x2="404" y2="368" class="divider"/>
+  <text x="96" y="397" class="mono file">__init__.py</text>
+  <text x="96" y="425" class="mono file">__main__.py</text>
+  <text x="96" y="453" class="mono file">cli/main.py</text>
+  <text x="285" y="453" class="sans file-dim">argparse / doctor</text>
+
+  <!-- Bootstrap -->
+  <rect x="460" y="289" width="380" height="190" rx="18" class="card"/>
+  <rect x="460" y="289" width="7" height="190" rx="3.5" fill="#a78bfa"/>
+  <text x="486" y="327" class="sans card-title">bootstrap/</text>
+  <text x="486" y="352" class="sans card-role">唯一掌握全局拓扑的组合根</text>
+  <line x1="486" y1="368" x2="814" y2="368" class="divider"/>
+  <text x="486" y="402" class="mono file">runtime_app.py</text>
+  <text x="486" y="430" class="mono file">shutdown.py</text>
+  <text x="486" y="457" class="sans file-dim">队列 · worker 接线 · 生命周期监督</text>
+
+  <!-- Shared -->
+  <rect x="870" y="289" width="860" height="190" rx="18" class="card"/>
+  <rect x="870" y="289" width="7" height="190" rx="3.5" fill="#f59e0b"/>
+  <text x="896" y="327" class="sans card-title">shared/</text>
+  <text x="1010" y="327" class="sans card-role">零业务依赖的跨模块契约与通用设施</text>
+  <line x1="896" y1="346" x2="1704" y2="346" class="divider"/>
+  <text x="896" y="380" class="mono file">events.py</text>
+  <text x="896" y="408" class="mono file">config.py</text>
+  <text x="896" y="436" class="mono file">config_loader.py</text>
+  <text x="1160" y="380" class="mono file">config_schema.py</text>
+  <text x="1160" y="408" class="mono file">queue_utils.py</text>
+  <text x="1160" y="436" class="mono file">logging_setup.py</text>
+  <text x="1438" y="380" class="mono file">asr_health.py</text>
+  <text x="1438" y="409" class="sans file-dim">dataclass 事件</text>
+  <text x="1438" y="437" class="sans file-dim">PyYAML · logging</text>
+
+  <!-- Modules enclosure -->
+  <rect x="50" y="515" width="1700" height="480" rx="24" class="module-box"/>
+  <rect x="82" y="497" width="650" height="38" rx="19" fill="#16243b" stroke="#3b82f6"/>
+  <text x="105" y="523" class="mono section">modules/</text>
+  <text x="230" y="523" class="sans card-role">能力内聚；跨模块访问必须通过目标模块的 public.py</text>
+
+  <!-- Audio engine module -->
+  <rect x="75" y="558" width="310" height="405" rx="18" class="card"/>
+  <rect x="75" y="558" width="310" height="58" rx="18" fill="#0d3444"/>
+  <rect x="75" y="598" width="310" height="18" fill="#0d3444"/>
+  <text x="97" y="594" class="mono card-title">audio_engine/</text>
+  <rect x="97" y="636" width="101" height="28" rx="14" fill="#123a2a" stroke="#22c55e"/>
+  <text x="147" y="656" text-anchor="middle" class="mono public">public.py</text>
+  <text x="97" y="694" class="sans card-role">infrastructure/</text>
+  <text x="116" y="727" class="mono file">audio_capture.py</text>
+  <text x="116" y="757" class="mono file">audio_bus.py</text>
+  <text x="116" y="787" class="mono file">preprocess.py</text>
+  <line x1="97" y1="815" x2="360" y2="815" class="divider"/>
+  <text x="97" y="846" class="sans file-dim">麦克风唯一所有者</text>
+  <text x="97" y="875" class="sans file-dim">sounddevice / PortAudio</text>
+  <text x="97" y="904" class="sans file-dim">NumPy · 三路 fan-out</text>
+  <text x="97" y="935" class="sans file-dim">RawAudioChunk → ProcessedFrame</text>
+
+  <!-- Capture module -->
+  <rect x="405" y="558" width="355" height="405" rx="18" class="card"/>
+  <rect x="405" y="558" width="355" height="58" rx="18" fill="#30265c"/>
+  <rect x="405" y="598" width="355" height="18" fill="#30265c"/>
+  <text x="427" y="594" class="mono card-title">capture/</text>
+  <rect x="427" y="636" width="101" height="28" rx="14" fill="#123a2a" stroke="#22c55e"/>
+  <text x="477" y="656" text-anchor="middle" class="mono public">public.py</text>
+  <text x="427" y="695" class="mono file">worker.py</text>
+  <text x="427" y="729" class="sans card-role">domain/</text>
+  <text x="446" y="758" class="mono file">capture_fsm.py</text>
+  <text x="427" y="792" class="sans card-role">application/</text>
+  <text x="446" y="821" class="mono file">transcript_extractor.py</text>
+  <text x="427" y="855" class="sans card-role">infrastructure/</text>
+  <text x="446" y="884" class="mono file">openwakeword_worker.py</text>
+  <text x="446" y="913" class="mono file">silero_worker.py</text>
+  <text x="427" y="944" class="sans file-dim">ONNX wake · Silero/Torch · FSM</text>
+
+  <!-- Transcription module -->
+  <rect x="780" y="558" width="310" height="405" rx="18" class="card"/>
+  <rect x="780" y="558" width="310" height="58" rx="18" fill="#123750"/>
+  <rect x="780" y="598" width="310" height="18" fill="#123750"/>
+  <text x="802" y="594" class="mono card-title">transcription/</text>
+  <rect x="802" y="636" width="101" height="28" rx="14" fill="#123a2a" stroke="#22c55e"/>
+  <text x="852" y="656" text-anchor="middle" class="mono public">public.py</text>
+  <text x="802" y="700" class="mono file">worker.py</text>
+  <text x="802" y="732" class="mono file">contracts.py</text>
+  <text x="802" y="771" class="sans card-role">infrastructure/</text>
+  <text x="821" y="803" class="mono file">funasr_ws.py</text>
+  <line x1="802" y1="830" x2="1065" y2="830" class="divider"/>
+  <text x="802" y="862" class="sans file-dim">asyncio / websockets</text>
+  <text x="802" y="893" class="sans file-dim">FunASR 2-pass adapter</text>
+  <text x="802" y="924" class="sans file-dim">重连 · 时间戳补偿</text>
+
+  <!-- Injection module -->
+  <rect x="1110" y="558" width="330" height="405" rx="18" class="card"/>
+  <rect x="1110" y="558" width="330" height="58" rx="18" fill="#4a2b20"/>
+  <rect x="1110" y="598" width="330" height="18" fill="#4a2b20"/>
+  <text x="1132" y="594" class="mono card-title">injection/</text>
+  <rect x="1132" y="636" width="101" height="28" rx="14" fill="#123a2a" stroke="#22c55e"/>
+  <text x="1182" y="656" text-anchor="middle" class="mono public">public.py</text>
+  <text x="1132" y="694" class="sans card-role">infrastructure/</text>
+  <text x="1151" y="725" class="mono file">base.py</text>
+  <text x="1151" y="755" class="mono file">factory.py</text>
+  <text x="1151" y="785" class="mono file">injector_worker.py</text>
+  <text x="1151" y="815" class="mono file">xdotool_injector.py</text>
+  <text x="1151" y="845" class="mono file">ydotool_injector.py</text>
+  <line x1="1132" y1="872" x2="1414" y2="872" class="divider"/>
+  <text x="1132" y="905" class="sans file-dim">subprocess · X11 / Wayland</text>
+  <text x="1132" y="935" class="sans file-dim">inject_text / openclaw_agent</text>
+
+  <!-- Storage module -->
+  <rect x="1460" y="558" width="265" height="405" rx="18" class="card"/>
+  <rect x="1460" y="558" width="265" height="58" rx="18" fill="#163c2d"/>
+  <rect x="1460" y="598" width="265" height="18" fill="#163c2d"/>
+  <text x="1482" y="594" class="mono card-title">storage/</text>
+  <rect x="1482" y="636" width="101" height="28" rx="14" fill="#123a2a" stroke="#22c55e"/>
+  <text x="1532" y="656" text-anchor="middle" class="mono public">public.py</text>
+  <text x="1482" y="701" class="mono file">contracts.py</text>
+  <text x="1482" y="740" class="sans card-role">infrastructure/</text>
+  <text x="1501" y="772" class="mono file">sqlite_storage_</text>
+  <text x="1501" y="797" class="mono file">worker.py</text>
+  <line x1="1482" y1="830" x2="1702" y2="830" class="divider"/>
+  <text x="1482" y="862" class="sans file-dim">SQLite 唯一写入者</text>
+  <text x="1482" y="893" class="sans file-dim">sqlite3 · WAL</text>
+  <text x="1482" y="924" class="sans file-dim">批提交 · 可选 JSONL</text>
+
+  <!-- Rules footer -->
+  <rect x="70" y="1030" width="1660" height="105" rx="18" fill="#101c2f" stroke="#2d4667"/>
+  <text x="95" y="1067" class="sans section">边界规则</text>
+  <circle cx="252" cy="1061" r="7" fill="#22c55e"/>
+  <text x="270" y="1068" class="sans rule">绿色 public.py 是跨模块入口</text>
+  <circle cx="608" cy="1061" r="7" fill="#38bdf8"/>
+  <text x="626" y="1068" class="sans rule">bootstrap 只依赖模块公开 API</text>
+  <circle cx="1010" cy="1061" r="7" fill="#f59e0b"/>
+  <text x="1028" y="1068" class="sans rule">shared 不反向依赖 modules</text>
+  <circle cx="1400" cy="1061" r="7" fill="#a78bfa"/>
+  <text x="1418" y="1068" class="sans rule">内部实现保持隐藏</text>
+  <text x="95" y="1106" class="sans file-dim">阅读顺序：cli/main.py → bootstrap/runtime_app.py → shared/events.py → modules/*/public.py → 目标模块内部</text>
+</svg>

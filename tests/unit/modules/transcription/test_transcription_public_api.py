@@ -1,33 +1,31 @@
 from __future__ import annotations
 
-from importlib import import_module
 import queue
 import threading
-import time
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from voxkeep.modules.transcription.application.backend_events import BackendTranscriptEvent
-from voxkeep.modules.transcription.contracts import TranscriptionBackendEvent, TranscriptionEngine
-from voxkeep.shared.events import AsrFinalEvent, ProcessedFrame, StorageRecord
-from voxkeep.modules.transcription.public import build_transcription_module
-from voxkeep.shared.config import AppConfig
+from voxkeep.modules.storage.public import StorageEvent
+from voxkeep.modules.transcription import public as transcription_public
+from voxkeep.modules.transcription import worker as transcription_worker
+from voxkeep.modules.transcription.contracts import TranscriptionEngine
+from voxkeep.shared.config import AsrConfig
+from voxkeep.shared.events import AsrFinalEvent, CaptureEvent, ProcessedFrame
 
 
-class _FakeEngine:
+class FakeEngine:
     def __init__(self) -> None:
-        self.final_queue: queue.Queue[TranscriptionBackendEvent] = queue.Queue()
+        self.final_queue: queue.Queue[AsrFinalEvent] = queue.Queue()
         self.started = 0
         self.closed = 0
         self.joined = 0
-        self.submitted = []
+        self.submitted: list[ProcessedFrame] = []
 
     def start(self) -> None:
         self.started += 1
 
-    def submit_frame(self, frame) -> None:  # type: ignore[no-untyped-def]
+    def submit_frame(self, frame: ProcessedFrame) -> None:
         self.submitted.append(frame)
 
     def close(self) -> None:
@@ -38,233 +36,109 @@ class _FakeEngine:
         self.joined += 1
 
 
-def test_transcription_module_submits_audio_and_emits_public_events(
-    monkeypatch, app_config: AppConfig
-) -> None:
-    fake_engine = _FakeEngine()
-    monkeypatch.setattr(
-        "voxkeep.modules.transcription.public.build_asr_engine",
-        lambda cfg, stop_event: fake_engine,
-    )
-    capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
-    storage_q = queue.Queue()
-    stop_event = threading.Event()
-    seen: list[str] = []
-
-    module = build_transcription_module(
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop_event,
-        asr_cfg=app_config.asr,
-        storage_cfg=app_config.storage,
-    )
-    module.subscribe_transcript_finalized(lambda event: seen.append(event.text))
-    module.start()
-    module.submit_audio(
-        ProcessedFrame(
-            frame_id=1,
-            data_int16=(b"\x00\x00" * 160),
-            pcm_f32=np.zeros(160, dtype=np.float32),
-            sample_rate=16000,
-            ts_start=1.0,
-            ts_end=1.01,
-        )
-    )
-    fake_engine.final_queue.put(
-        BackendTranscriptEvent(
-            segment_id="seg-1",
-            text="hello",
-            start_ts=1.0,
-            end_ts=1.2,
-            event_type="final",
-        )
+def _config() -> AsrConfig:
+    return AsrConfig(
+        backend="funasr_ws",
+        external_host="127.0.0.1",
+        external_port=10096,
+        external_path="/",
+        use_ssl=False,
+        reconnect_initial_s=1.0,
+        reconnect_max_s=30.0,
+        funasr_mode="2pass",
+        funasr_chunk_size=(5, 10, 5),
+        funasr_chunk_interval=10,
+        funasr_encoder_chunk_look_back=4,
+        funasr_decoder_chunk_look_back=1,
+        funasr_itn=True,
+        max_queue_size=16,
+        sample_rate=16000,
     )
 
-    deadline = time.time() + 2.0
-    while time.time() < deadline and not seen:
-        time.sleep(0.02)
 
-    stop_event.set()
-    module.join(timeout=2)
-
-    assert len(fake_engine.submitted) == 1
-    assert seen == ["hello"]
-    assert fake_engine.joined == 1
-    capture_event = capture_q.get_nowait()
-    storage_event = storage_q.get_nowait()
-    assert isinstance(capture_event, AsrFinalEvent)
-    assert capture_event.text == "hello"
-    assert isinstance(storage_event, StorageRecord)
-    assert storage_event.text == "hello"
-
-
-def test_transcription_module_ignores_non_final_backend_events(
-    monkeypatch, app_config: AppConfig
-) -> None:
-    fake_engine = _FakeEngine()
-    monkeypatch.setattr(
-        "voxkeep.modules.transcription.public.build_asr_engine",
-        lambda cfg, stop_event: fake_engine,
-    )
-    capture_q: queue.Queue[AsrFinalEvent] = queue.Queue()
-    storage_q = queue.Queue()
-    stop_event = threading.Event()
-    seen: list[str] = []
-
-    module = build_transcription_module(
-        capture_queue=capture_q,
-        storage_queue=storage_q,
-        stop_event=stop_event,
-        asr_cfg=app_config.asr,
-        storage_cfg=app_config.storage,
-    )
-    module.subscribe_transcript_finalized(lambda event: seen.append(event.text))
-    module.start()
-    fake_engine.final_queue.put(
-        BackendTranscriptEvent(
-            segment_id="seg-1",
-            text="partial text",
-            start_ts=1.0,
-            end_ts=1.1,
-            event_type="partial",
-        )
-    )
-
-    deadline = time.time() + 1.0
-    while time.time() < deadline and not seen:
-        time.sleep(0.02)
-
-    stop_event.set()
-    module.join(timeout=2)
-
-    assert seen == []
-    assert capture_q.empty()
-    assert storage_q.empty()
-
-
-def test_transcription_module_submit_audio_drops_when_queue_is_full(
-    monkeypatch, app_config: AppConfig
-) -> None:
-    fake_engine = _FakeEngine()
-    monkeypatch.setattr(
-        "voxkeep.modules.transcription.public.build_asr_engine",
-        lambda cfg, stop_event: fake_engine,
-    )
-    stop_event = threading.Event()
-    module = build_transcription_module(
-        capture_queue=queue.Queue(),
-        storage_queue=queue.Queue(),
-        stop_event=stop_event,
-        asr_cfg=app_config.asr,
-        storage_cfg=app_config.storage,
-        in_queue=queue.Queue(maxsize=1),
-    )
-    frame = ProcessedFrame(
+def _frame() -> ProcessedFrame:
+    return ProcessedFrame(
         frame_id=1,
-        data_int16=(b"\x00\x00" * 160),
+        data_int16=b"\x00\x00" * 160,
         pcm_f32=np.zeros(160, dtype=np.float32),
         sample_rate=16000,
         ts_start=1.0,
         ts_end=1.01,
     )
 
-    module.submit_audio(frame)
-    module.submit_audio(frame)
 
-    assert fake_engine.submitted == []
+def test_builder_wires_injected_queues_config_and_stop_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_engine = FakeEngine()
+    config = _config()
+    stop_event = threading.Event()
+    audio_queue: queue.Queue[ProcessedFrame] = queue.Queue()
+    capture_queue: queue.Queue[CaptureEvent] = queue.Queue()
+    storage_queue: queue.Queue[StorageEvent] = queue.Queue()
+    received: dict[str, object] = {}
+
+    def build_engine(*, cfg: AsrConfig) -> FakeEngine:
+        received.update(cfg=cfg)
+        return fake_engine
+
+    monkeypatch.setattr(transcription_worker, "FunAsrWsEngine", build_engine)
+
+    worker = transcription_public.build_transcription_module(
+        audio_queue=audio_queue,
+        capture_queue=capture_queue,
+        storage_queue=storage_queue,
+        stop_event=stop_event,
+        cfg=config,
+    )
+
+    assert isinstance(worker, transcription_worker.TranscriptionWorker)
+    assert received == {"cfg": config}
 
 
-def test_transcription_module_stop_sets_stop_event(monkeypatch, app_config: AppConfig) -> None:
-    fake_engine = _FakeEngine()
+def test_built_worker_runs_engine_and_publishes_direct_final_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_engine = FakeEngine()
     monkeypatch.setattr(
-        "voxkeep.modules.transcription.public.build_asr_engine",
-        lambda cfg, stop_event: fake_engine,
+        transcription_worker,
+        "FunAsrWsEngine",
+        lambda *, cfg: fake_engine,
     )
     stop_event = threading.Event()
-    module = build_transcription_module(
-        capture_queue=queue.Queue(),
-        storage_queue=queue.Queue(),
-        stop_event=stop_event,
-        asr_cfg=app_config.asr,
-        storage_cfg=app_config.storage,
-    )
-
-    module.stop()
-
-    assert stop_event.is_set() is True
-
-
-def test_build_asr_engine_rejects_unknown_backend() -> None:
-    engine_factory = import_module("voxkeep.modules.transcription.infrastructure.engine_factory")
-
-    with pytest.raises(ValueError, match="unsupported asr backend"):
-        engine_factory.build_asr_engine(
-            cfg=SimpleNamespace(backend="missing"),
-            stop_event=threading.Event(),
-        )
-
-
-def test_build_asr_engine_exposes_backend_dispatch_registry() -> None:
-    engine_factory = import_module("voxkeep.modules.transcription.infrastructure.engine_factory")
-    builders = getattr(engine_factory, "BACKEND_ENGINE_BUILDERS", None)
-
-    assert builders is not None
-    assert set(builders) >= {"qwen_vllm"}
-
-
-def test_build_asr_engine_uses_backend_specific_constructor(
-    monkeypatch, app_config: AppConfig
-) -> None:
-    engine_factory = import_module("voxkeep.modules.transcription.infrastructure.engine_factory")
-    sentinel_qwen = object()
-    monkeypatch.setitem(
-        engine_factory.BACKEND_ENGINE_BUILDERS, "qwen_vllm", lambda **_: sentinel_qwen
-    )
-
-    from dataclasses import replace
-
-    qwen = engine_factory.build_asr_engine(
-        cfg=replace(app_config.asr, backend="qwen_vllm"),
-        stop_event=threading.Event(),
-    )
-
-    assert qwen is sentinel_qwen
-
-
-def test_build_transcription_module_supports_qwen_backend(
-    monkeypatch, app_config: AppConfig
-) -> None:
-    fake_engine = _FakeEngine()
-    from dataclasses import replace
-
-    new_asr = replace(app_config.asr, backend="qwen_vllm")
-    monkeypatch.setattr(
-        "voxkeep.modules.transcription.public.build_asr_engine",
-        lambda cfg, stop_event: fake_engine,
-    )
-
-    module = build_transcription_module(
-        capture_queue=queue.Queue(),
-        storage_queue=queue.Queue(),
-        stop_event=threading.Event(),
-        asr_cfg=new_asr,
-        storage_cfg=app_config.storage,
-    )
-
-    assert module is not None
-
-
-def test_transcription_engine_contract_exposes_join_method() -> None:
-    assert "join" in TranscriptionEngine.__dict__
-
-
-def test_backend_transcript_event_marks_final_events() -> None:
-    event = BackendTranscriptEvent(
+    audio_queue: queue.Queue[ProcessedFrame] = queue.Queue()
+    capture_queue: queue.Queue[CaptureEvent] = queue.Queue()
+    storage_queue: queue.Queue[StorageEvent] = queue.Queue()
+    frame = _frame()
+    event = AsrFinalEvent(
         segment_id="seg-1",
         text="hello",
         start_ts=1.0,
         end_ts=1.2,
-        event_type="final",
+    )
+    audio_queue.put(frame)
+    fake_engine.final_queue.put(event)
+    stop_event.set()
+    worker = transcription_public.build_transcription_module(
+        audio_queue=audio_queue,
+        capture_queue=capture_queue,
+        storage_queue=storage_queue,
+        stop_event=stop_event,
+        cfg=_config(),
     )
 
-    assert event.is_final is True
+    worker.start()
+    worker.join(timeout=2)
+
+    assert fake_engine.started == 1
+    assert fake_engine.closed == 1
+    assert fake_engine.joined == 1
+    assert fake_engine.submitted == [frame]
+    assert capture_queue.get_nowait() is event
+    assert storage_queue.get_nowait() is event
+
+
+def test_transcription_engine_contract_includes_lifecycle_and_audio_methods() -> None:
+    assert {"start", "submit_frame", "close", "join", "final_queue"} <= set(
+        TranscriptionEngine.__dict__
+    )

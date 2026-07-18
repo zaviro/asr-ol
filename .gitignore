@@ -26,16 +26,18 @@ dist/
 # Local manual audio fixtures
 tests/true-testvoice/*.m4a
 
-# Local GPT-SoVITS bootstrap assets
-inputs/default_reference.wav
-inputs/reference.wav
-models/
 
 # Local test coverage outputs
 .coverage
 coverage.xml
 
 # IDE and OS
+.codex/hooks.json
+graphify-out/cost.json
+graphify-out/cache/
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/.graphify_analysis.json
 .vscode/
 .idea/
 .DS_Store

@@ -21,6 +21,7 @@ dev = [
   "pyright>=1.1.389",
   "ruff>=0.9.0",
   "pre-commit>=4.0.1",
+  "graphifyy>=0.9.18",
 ]
 runtime-ai = [
   "openwakeword>=0.6.0",
@@ -47,11 +48,6 @@ convention = "google"
 "tests/**" = ["D"]
 "src/voxkeep/__init__.py" = ["D"]
 "src/voxkeep/__main__.py" = ["D"]
-"src/voxkeep/agents/**" = ["D"]
-"src/voxkeep/infra/audio/**" = ["D"]
-"src/voxkeep/infra/vad/**" = ["D"]
-"src/voxkeep/infra/wake/**" = ["D"]
-"src/voxkeep/tools/**" = ["D"]
 
 [tool.pyright]
 pythonVersion = "3.11"

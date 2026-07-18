@@ -91,28 +91,16 @@ echo "== ASR backend health =="
 if run_python - <<'PY'
 from __future__ import annotations
 
-from voxkeep.shared.asr_assets import read_assets_state
 from voxkeep.shared.asr_health import classify_backend_health
 from voxkeep.shared.asr_health import probe_websocket_handshake
 from voxkeep.shared.config import load_config
 
 
 cfg = load_config("config/config.yaml")
-backend = cfg.asr.backend
-detail = f"{backend} @ {cfg.asr.external_host}:{cfg.asr.external_port}"
-asset_note = ""
-try:
-    read_assets_state()
-except ValueError as exc:
-    asset_note = str(exc)
-
 tcp_ok, handshake_ok, probe_detail = probe_websocket_handshake(cfg.asr.ws_url)
-if asset_note:
-    probe_detail = f"{probe_detail}; assets warning: {asset_note}"
 status = classify_backend_health(
     tcp_ok=tcp_ok,
     handshake_ok=handshake_ok,
-    assets_status="ok",
     detail=probe_detail,
 )
 

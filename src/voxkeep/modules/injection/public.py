@@ -1,81 +1,14 @@
-"""Public entrypoints for the injection module."""
+"""Public construction API for the injection module."""
 
 from __future__ import annotations
 
 import queue
 import threading
-from typing import Protocol
 
-from voxkeep.modules.injection.contracts import InjectionResult
 from voxkeep.modules.injection.infrastructure.factory import build_injector
 from voxkeep.modules.injection.infrastructure.injector_worker import InjectorWorker
 from voxkeep.shared.config import InjectorConfig
 from voxkeep.shared.events import CaptureCommand
-
-
-class InjectionModule(Protocol):
-    """Public API exposed by the injection module."""
-
-    def start(self) -> None:
-        """Start module resources."""
-        raise NotImplementedError
-
-    def stop(self) -> None:
-        """Stop module resources."""
-        raise NotImplementedError
-
-    def join(self, timeout: float | None = None) -> None:
-        """Join module worker resources."""
-        raise NotImplementedError
-
-    def is_alive(self) -> bool:
-        """Return whether module worker resources are alive."""
-        raise NotImplementedError
-
-    def execute_capture(self, event: CaptureCommand) -> InjectionResult:
-        """Execute the configured output action for a capture event."""
-        raise NotImplementedError
-
-
-class WorkerInjectionModule:
-    """Public injection module backed by the legacy worker implementation."""
-
-    def __init__(
-        self,
-        in_queue: queue.Queue[CaptureCommand],
-        stop_event: threading.Event,
-        cfg: InjectorConfig,
-    ) -> None:
-        """Create an injection module backed by the worker implementation."""
-        self._stop_event = stop_event
-        self._worker = InjectorWorker(
-            in_queue=in_queue,
-            stop_event=stop_event,
-            injector=build_injector(cfg),
-            openclaw_command=cfg.openclaw_command,
-            openclaw_timeout_s=cfg.openclaw_timeout_s,
-        )
-
-    def start(self) -> None:
-        """Start the underlying injection worker."""
-        self._worker.start()
-
-    def stop(self) -> None:
-        """Expose a symmetric lifecycle hook for the runtime module."""
-        self._stop_event.set()
-
-    def join(self, timeout: float | None = None) -> None:
-        """Join the underlying injection worker."""
-        self._worker.join(timeout=timeout)
-
-    def is_alive(self) -> bool:
-        """Report whether the underlying worker thread is alive."""
-        return self._worker.is_alive()
-
-    def execute_capture(self, event: CaptureCommand) -> InjectionResult:
-        """Execute one capture event through the configured output action."""
-        ok = self._worker.execute_command(event)
-        return InjectionResult(ok=ok, action=event.action)
 
 
 def build_injection_module(
@@ -83,9 +16,15 @@ def build_injection_module(
     in_queue: queue.Queue[CaptureCommand],
     stop_event: threading.Event,
     cfg: InjectorConfig,
-) -> InjectionModule:
-    """Build the injection module public entrypoint."""
-    return WorkerInjectionModule(in_queue=in_queue, stop_event=stop_event, cfg=cfg)
+) -> InjectorWorker:
+    """Build the action worker and its session-aware injector backend."""
+    return InjectorWorker(
+        in_queue=in_queue,
+        stop_event=stop_event,
+        injector=build_injector(cfg),
+        openclaw_command=cfg.openclaw_command,
+        openclaw_timeout_s=cfg.openclaw_timeout_s,
+    )
 
 
-__all__ = ["InjectionModule", "WorkerInjectionModule", "build_injection_module"]
+__all__ = ["build_injection_module"]

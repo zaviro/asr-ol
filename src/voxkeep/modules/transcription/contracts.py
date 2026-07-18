@@ -1,4 +1,4 @@
-"""Public contracts for the transcription module."""
+"""Internal engine contract for transcription backends."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ class TranscriptionEngine(Protocol):
     """Structural contract for transcription backends."""
 
     @property
-    def final_queue(self) -> queue.Queue[TranscriptionBackendEvent]:
-        """Queue that receives backend transcript events."""
+    def final_queue(self) -> queue.Queue[AsrFinalEvent]:
+        """Queue that receives normalized final transcript events."""
         raise NotImplementedError
 
     def start(self) -> None:
@@ -33,14 +33,4 @@ class TranscriptionEngine(Protocol):
         raise NotImplementedError
 
 
-class TranscriptionBackendEvent(Protocol):
-    """Structural shape for backend transcript events before worker normalization."""
-
-    segment_id: str
-    text: str
-    start_ts: float
-    end_ts: float
-    is_final: bool
-
-
-__all__ = ["AsrFinalEvent", "TranscriptionBackendEvent", "TranscriptionEngine"]
+__all__ = ["TranscriptionEngine"]

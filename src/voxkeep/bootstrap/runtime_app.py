@@ -1,197 +1,306 @@
-"""Application runtime composition root and lifecycle orchestration."""
+"""Build and supervise the complete local audio-to-action pipeline."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import queue
 import threading
 import time
+from typing import Protocol
 
+from voxkeep.modules.audio_engine.public import AudioEngine, build_audio_engine
 from voxkeep.modules.capture.public import build_capture_detection_workers, build_capture_module
 from voxkeep.modules.injection.public import build_injection_module
-from voxkeep.modules.audio_engine.infrastructure.audio_bus import AudioBus
-from voxkeep.modules.audio_engine.infrastructure.audio_capture import SoundDeviceAudioSource
-from voxkeep.modules.audio_engine.infrastructure.lifecycle import Worker, WorkerHandle
-from voxkeep.modules.storage.public import build_storage_module
+from voxkeep.modules.storage.public import StorageEvent, build_storage_module
 from voxkeep.modules.transcription.public import build_transcription_module
 from voxkeep.shared.config import AppConfig
-from voxkeep.shared.events import (
-    AsrFinalEvent,
-    CaptureCommand,
-    ProcessedFrame,
-    RawAudioChunk,
-    StorageRecord,
-    VadEvent,
-    WakeEvent,
-)
+from voxkeep.shared.events import CaptureCommand, CaptureEvent, ProcessedFrame
 
 logger = logging.getLogger(__name__)
-
 
 _RUN_FOREVER_POLL_S = 0.2
 
 
-class AppRuntime:
-    """Assemble and coordinate the full audio-to-action runtime pipeline."""
+class _Worker(Protocol):
+    """Lifecycle shape shared by runtime workers."""
 
-    def __init__(self, cfg: AppConfig):
-        """Create queues, components, workers, and lifecycle plans."""
-        self._cfg = cfg
-        self.stop_event = threading.Event()
-        self._fatal_error: str | None = None
+    def start(self) -> None: ...
 
-        self.raw_queue: queue.Queue[RawAudioChunk] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
-        self.wake_audio_queue: queue.Queue[ProcessedFrame] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
-        self.vad_audio_queue: queue.Queue[ProcessedFrame] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
-        self.asr_audio_queue: queue.Queue[ProcessedFrame] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
+    def join(self, timeout: float | None = None) -> None: ...
 
-        self.wake_event_queue: queue.Queue[WakeEvent] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
-        self.vad_event_queue: queue.Queue[VadEvent] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
-        self.asr_event_bus: queue.Queue[AsrFinalEvent] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
-        self.capture_asr_queue: queue.Queue[AsrFinalEvent] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
-        self.capture_cmd_queue: queue.Queue[CaptureCommand] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
+    def is_alive(self) -> bool: ...
 
-        self.storage_queue: queue.Queue[StorageRecord] = queue.Queue(
-            maxsize=cfg.audio_engine.max_queue_size
-        )
 
-        self.audio_source = SoundDeviceAudioSource(out_queue=self.raw_queue, cfg=cfg.audio_engine)
-        self.audio_bus = AudioBus(
-            raw_queue=self.raw_queue,
-            wake_queue=self.wake_audio_queue,
-            vad_queue=self.vad_audio_queue,
-            asr_queue=self.asr_audio_queue,
-            stop_event=self.stop_event,
-        )
+@dataclass(slots=True)
+class PipelineQueues:
+    """All bounded queues that connect runtime modules."""
 
-        self.wake_worker, self.vad_worker = build_capture_detection_workers(
-            in_queue=self.wake_audio_queue,
-            wake_out_queue=self.wake_event_queue,
-            vad_out_queue=self.vad_event_queue,
-            stop_event=self.stop_event,
-            cfg=cfg.capture,
-        )
+    wake_audio: queue.Queue[ProcessedFrame]
+    vad_audio: queue.Queue[ProcessedFrame]
+    asr_audio: queue.Queue[ProcessedFrame]
+    capture_events: queue.Queue[CaptureEvent]
+    capture_commands: queue.Queue[CaptureCommand]
+    storage_events: queue.Queue[StorageEvent]
 
-        self.asr_worker = build_transcription_module(
-            in_queue=self.asr_audio_queue,
-            capture_queue=self.capture_asr_queue,
-            storage_queue=self.storage_queue,
-            stop_event=self.stop_event,
-            asr_cfg=cfg.asr,
-            storage_cfg=cfg.storage,
-        )
-        self.capture_worker = build_capture_module(
-            wake_queue=self.wake_event_queue,
-            vad_queue=self.vad_event_queue,
-            asr_queue=self.capture_asr_queue,
-            downstream_queue=self.capture_cmd_queue,
-            storage_queue=self.storage_queue,
-            stop_event=self.stop_event,
-            cfg=cfg.capture,
-        )
-
-        self.injector_worker = build_injection_module(
-            in_queue=self.capture_cmd_queue,
-            stop_event=self.stop_event,
-            cfg=cfg.injector,
-        )
-
-        self.storage_worker = build_storage_module(
-            in_queue=self.storage_queue,
-            stop_event=self.stop_event,
-            cfg=cfg.storage,
-        )
-
-        self._startup_workers = (
-            self._worker_handle("storage_worker", self.storage_worker, 2),
-            self._worker_handle("capture_worker", self.capture_worker, 2),
-            self._worker_handle("injector_worker", self.injector_worker, 2),
-            self._worker_handle("wake_worker", self.wake_worker, 2),
-            self._worker_handle("vad_worker", self.vad_worker, 2),
-            self._worker_handle("asr_worker", self.asr_worker, 3),
-            self._worker_handle("audio_bus", self.audio_bus, 2),
-        )
-        self._shutdown_workers = (
-            self._worker_handle("audio_bus", self.audio_bus, 2),
-            self._worker_handle("wake_worker", self.wake_worker, 2),
-            self._worker_handle("vad_worker", self.vad_worker, 2),
-            self._worker_handle("asr_worker", self.asr_worker, 3),
-            self._worker_handle("capture_worker", self.capture_worker, 2),
-            self._worker_handle("injector_worker", self.injector_worker, 2),
-            self._worker_handle("storage_worker", self.storage_worker, 2),
-        )
-
-    @staticmethod
-    def _worker_handle(name: str, worker: Worker, join_timeout_s: float) -> WorkerHandle:
-        return WorkerHandle(name=name, worker=worker, join_timeout_s=join_timeout_s)
-
-    def _start_workers(self) -> None:
-        for handle in self._startup_workers:
-            handle.worker.start()
-
-    def _join_workers(self) -> None:
-        for handle in self._shutdown_workers:
-            handle.worker.join(timeout=handle.join_timeout_s)
-
-    def _find_unhealthy_workers(self) -> tuple[str, ...]:
-        return tuple(
-            handle.name for handle in self._startup_workers if not handle.worker.is_alive()
+    @classmethod
+    def create(cls, maxsize: int) -> PipelineQueues:
+        """Create every pipeline queue with one shared capacity."""
+        return cls(
+            wake_audio=queue.Queue(maxsize=maxsize),
+            vad_audio=queue.Queue(maxsize=maxsize),
+            asr_audio=queue.Queue(maxsize=maxsize),
+            capture_events=queue.Queue(maxsize=maxsize),
+            capture_commands=queue.Queue(maxsize=maxsize),
+            storage_events=queue.Queue(maxsize=maxsize),
         )
 
     @property
+    def sizes(self) -> dict[str, int]:
+        """Return externally meaningful queue depths."""
+        return {
+            "wake_audio_queue": self.wake_audio.qsize(),
+            "vad_audio_queue": self.vad_audio.qsize(),
+            "asr_audio_queue": self.asr_audio.qsize(),
+            "capture_event_queue": self.capture_events.qsize(),
+            "capture_command_queue": self.capture_commands.qsize(),
+            "storage_queue": self.storage_events.qsize(),
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class WorkerSpec:
+    """Name one supervised worker and its shutdown timeout."""
+
+    name: str
+    worker: _Worker
+    join_timeout_s: float = 2.0
+
+
+@dataclass(slots=True)
+class RuntimeSignals:
+    """Independent stop signals for each producer-to-consumer stage."""
+
+    requested: threading.Event
+    audio: threading.Event
+    analysis: threading.Event
+    capture: threading.Event
+    outputs: threading.Event
+
+    @classmethod
+    def create(cls) -> RuntimeSignals:
+        """Create an unset signal for every shutdown stage."""
+        return cls(
+            requested=threading.Event(),
+            audio=threading.Event(),
+            analysis=threading.Event(),
+            capture=threading.Event(),
+            outputs=threading.Event(),
+        )
+
+
+@dataclass(slots=True, frozen=True)
+class ShutdownStage:
+    """Signal and workers that can stop after their producers finish."""
+
+    signal: threading.Event
+    workers: tuple[WorkerSpec, ...]
+
+
+@dataclass(slots=True, frozen=True)
+class RuntimeComponents:
+    """Concrete modules assembled for one runtime instance."""
+
+    audio: AudioEngine
+    storage: _Worker
+    capture: _Worker
+    injection: _Worker
+    wake: _Worker
+    vad: _Worker
+    transcription: _Worker
+
+    @property
+    def startup(self) -> tuple[WorkerSpec, ...]:
+        """Return consumer-first startup order."""
+        return (
+            WorkerSpec("storage", self.storage),
+            WorkerSpec("capture", self.capture),
+            WorkerSpec("injection", self.injection),
+            WorkerSpec("wake", self.wake),
+            WorkerSpec("vad", self.vad),
+            WorkerSpec("transcription", self.transcription, 3.0),
+            WorkerSpec("audio", self.audio),
+        )
+
+    def downstream_shutdown(self, signals: RuntimeSignals) -> tuple[ShutdownStage, ...]:
+        """Return producer-first stages for lossless downstream draining."""
+        return (
+            ShutdownStage(
+                signals.analysis,
+                (
+                    WorkerSpec("wake", self.wake),
+                    WorkerSpec("vad", self.vad),
+                    WorkerSpec("transcription", self.transcription, 3.0),
+                ),
+            ),
+            ShutdownStage(signals.capture, (WorkerSpec("capture", self.capture),)),
+            ShutdownStage(
+                signals.outputs,
+                (
+                    WorkerSpec("injection", self.injection),
+                    WorkerSpec("storage", self.storage),
+                ),
+            ),
+        )
+
+
+class AppRuntime:
+    """Supervise already-assembled runtime components."""
+
+    def __init__(
+        self,
+        *,
+        signals: RuntimeSignals,
+        queues: PipelineQueues,
+        components: RuntimeComponents,
+    ) -> None:
+        """Create a supervisor around an assembled runtime."""
+        self._signals = signals
+        self.queues = queues
+        self.components = components
+        self._fatal_error: str | None = None
+        self._stop_lock = threading.Lock()
+        self._stopped = False
+
+    @property
+    def stop_event(self) -> threading.Event:
+        """Expose the operator-facing shutdown request signal."""
+        return self._signals.requested
+
+    @property
     def fatal_error(self) -> str | None:
-        """Return fatal runtime error message when one has occurred."""
+        """Return the fatal worker-health error, if one occurred."""
         return self._fatal_error
 
+    @property
+    def queue_sizes(self) -> dict[str, int]:
+        """Return queue depths without exposing queue objects."""
+        return {**self.components.audio.queue_sizes, **self.queues.sizes}
+
     def start(self) -> None:
-        """Start all workers and audio capture in dependency-safe order."""
+        """Start all consumers before live audio production."""
         logger.info("runtime starting")
-        self._start_workers()
-        self.audio_source.start()
+        try:
+            for spec in self.components.startup:
+                spec.worker.start()
+        except Exception:
+            self.stop_event.set()
+            logger.exception("runtime startup failed")
+            self.stop()
+            raise
         logger.info("runtime started")
 
     def run_forever(self) -> None:
-        """Block until shutdown while monitoring worker health."""
+        """Monitor workers until shutdown or a fatal exit."""
         while not self.stop_event.is_set():
-            unhealthy_workers = self._find_unhealthy_workers()
-            if unhealthy_workers:
-                names = ", ".join(unhealthy_workers)
-                self._fatal_error = f"worker stopped unexpectedly: {names}"
+            unhealthy = [
+                spec.name for spec in self.components.startup if not spec.worker.is_alive()
+            ]
+            if unhealthy:
+                self._fatal_error = f"worker stopped unexpectedly: {', '.join(unhealthy)}"
                 logger.error(self._fatal_error)
                 self.stop_event.set()
                 return
             time.sleep(_RUN_FOREVER_POLL_S)
 
     def stop(self) -> None:
-        """Trigger graceful shutdown and join all workers."""
+        """Stop each producer stage, then drain its downstream consumers."""
+        with self._stop_lock:
+            if self._stopped:
+                return
+            self._stopped = True
+
         logger.info("runtime stopping")
         self.stop_event.set()
 
-        try:
-            self.audio_source.stop()
-        except Exception:
-            logger.exception("audio source stop failed")
+        # Stop live production first. The audio bus drains raw input while all
+        # analysis consumers are still running.
+        self.components.audio.stop()
+        self.components.audio.join(timeout=2.0)
+        self._warn_if_alive(WorkerSpec("audio", self.components.audio))
 
-        self._join_workers()
+        # Each later stage remains alive until every producer feeding it has
+        # joined, preventing a temporarily empty queue from causing early exit.
+        for stage in self.components.downstream_shutdown(self._signals):
+            stage.signal.set()
+            for spec in stage.workers:
+                spec.worker.join(timeout=spec.join_timeout_s)
+                self._warn_if_alive(spec)
         logger.info("runtime stopped")
 
+    @staticmethod
+    def _warn_if_alive(spec: WorkerSpec) -> None:
+        if spec.worker.is_alive():
+            logger.warning(
+                "worker did not stop within %.1fs name=%s",
+                spec.join_timeout_s,
+                spec.name,
+            )
 
-__all__ = ["AppRuntime"]
+
+def build_runtime(cfg: AppConfig) -> AppRuntime:
+    """Create queues, module workers, and their lifecycle supervisor."""
+    signals = RuntimeSignals.create()
+    queues = PipelineQueues.create(cfg.audio_engine.max_queue_size)
+
+    audio = build_audio_engine(
+        cfg=cfg.audio_engine,
+        stop_event=signals.audio,
+        wake_queue=queues.wake_audio,
+        vad_queue=queues.vad_audio,
+        asr_queue=queues.asr_audio,
+    )
+    wake, vad = build_capture_detection_workers(
+        wake_in_queue=queues.wake_audio,
+        vad_in_queue=queues.vad_audio,
+        event_queue=queues.capture_events,
+        stop_event=signals.analysis,
+        cfg=cfg.capture,
+    )
+    transcription = build_transcription_module(
+        audio_queue=queues.asr_audio,
+        capture_queue=queues.capture_events,
+        storage_queue=queues.storage_events,
+        stop_event=signals.analysis,
+        cfg=cfg.asr,
+    )
+    capture = build_capture_module(
+        event_queue=queues.capture_events,
+        command_queue=queues.capture_commands,
+        storage_queue=queues.storage_events,
+        stop_event=signals.capture,
+        cfg=cfg.capture,
+    )
+    injection = build_injection_module(
+        in_queue=queues.capture_commands,
+        stop_event=signals.outputs,
+        cfg=cfg.injector,
+    )
+    storage = build_storage_module(
+        in_queue=queues.storage_events,
+        stop_event=signals.outputs,
+        cfg=cfg.storage,
+    )
+    components = RuntimeComponents(
+        audio=audio,
+        storage=storage,
+        capture=capture,
+        injection=injection,
+        wake=wake,
+        vad=vad,
+        transcription=transcription,
+    )
+    return AppRuntime(signals=signals, queues=queues, components=components)
+
+
+__all__ = ["AppRuntime", "build_runtime"]

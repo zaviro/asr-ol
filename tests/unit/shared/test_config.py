@@ -19,7 +19,6 @@ def test_load_config_from_yaml_and_env(tmp_path, monkeypatch):
         "    host: 127.0.0.1\n"
         "    port: 10096\n"
         "wake:\n"
-        "  threshold: 0.4\n"
         "  rules:\n"
         "    - keyword: alexa\n"
         "      enabled: true\n"
@@ -43,16 +42,14 @@ def test_load_config_from_yaml_and_env(tmp_path, monkeypatch):
     assert cfg.audio_engine.sample_rate == 16000
     assert cfg.audio_engine.frame_ms == 20
     assert cfg.capture.pre_roll_ms == 1500
-    assert cfg.asr.backend == "qwen_vllm"
-    assert cfg.asr.mode == "external"
+    assert cfg.asr.backend == "funasr_ws"
     assert cfg.asr.external_host == "127.0.0.1"
     assert cfg.asr.external_port == 10096
     assert cfg.asr.external_path == "/"
     assert cfg.asr.use_ssl is False
-    assert cfg.asr.qwen_model == "Qwen/Qwen3-ASR-1.7B"
-    assert cfg.asr.qwen_realtime is True
-    assert cfg.asr.qwen_gpu_memory_utilization == 0.65
-    assert cfg.asr.qwen_max_model_len == 32768
+    assert cfg.asr.funasr_mode == "2pass"
+    assert cfg.asr.funasr_chunk_size == (5, 10, 5)
+    assert cfg.asr.funasr_itn is True
     assert [rule.keyword for rule in cfg.capture.enabled_wake_rules] == ["alexa", "hey_jarvis"]
     assert cfg.capture.enabled_wake_rules[1].threshold == 0.6
     assert cfg.capture.enabled_wake_rules[1].action == "openclaw_agent"
@@ -64,29 +61,26 @@ def test_load_config_applies_new_asr_env_overrides(tmp_path, monkeypatch) -> Non
     cfg_file = tmp_path / "env.yaml"
     cfg_file.write_text("{}\n", encoding="utf-8")
 
-    monkeypatch.setenv("VOXKEEP_ASR_BACKEND", "qwen_vllm")
-    monkeypatch.setenv("VOXKEEP_ASR_MODE", "external")
+    monkeypatch.setenv("VOXKEEP_ASR_BACKEND", "funasr_ws")
     monkeypatch.setenv("VOXKEEP_ASR_EXTERNAL_HOST", "10.0.0.7")
     monkeypatch.setenv("VOXKEEP_ASR_EXTERNAL_PORT", "11096")
 
     cfg = load_config(cfg_file)
 
-    assert cfg.asr.backend == "qwen_vllm"
-    assert cfg.asr.mode == "external"
+    assert cfg.asr.backend == "funasr_ws"
     assert cfg.asr.external_host == "10.0.0.7"
     assert cfg.asr.external_port == 11096
 
 
-def test_load_config_supports_qwen_backend_and_runtime_reconnect_settings(tmp_path) -> None:
-    cfg_file = tmp_path / "qwen.yaml"
+def test_load_config_supports_funasr_backend_and_runtime_reconnect_settings(tmp_path) -> None:
+    cfg_file = tmp_path / "funasr.yaml"
     cfg_file.write_text(
         "asr:\n"
-        "  backend: qwen_vllm\n"
-        "  mode: external\n"
+        "  backend: funasr_ws\n"
         "  external:\n"
         "    host: 127.0.0.1\n"
-        "    port: 8000\n"
-        "    path: /v1/realtime\n"
+        "    port: 10096\n"
+        "    path: /\n"
         "    use_ssl: false\n"
         "  runtime:\n"
         "    reconnect_initial_s: 2.5\n"
@@ -96,46 +90,51 @@ def test_load_config_supports_qwen_backend_and_runtime_reconnect_settings(tmp_pa
 
     cfg = load_config(cfg_file)
 
-    assert cfg.asr.backend == "qwen_vllm"
-    assert cfg.asr.external_port == 8000
-    assert cfg.asr.external_path == "/v1/realtime"
+    assert cfg.asr.backend == "funasr_ws"
+    assert cfg.asr.external_port == 10096
+    assert cfg.asr.external_path == "/"
     assert cfg.asr.reconnect_initial_s == 2.5
     assert cfg.asr.reconnect_max_s == 9.0
-    assert cfg.asr.runtime_reconnect_initial_s == 2.5
-    assert cfg.asr.runtime_reconnect_max_s == 9.0
 
 
-def test_load_config_supports_qwen_model_and_realtime_settings(tmp_path) -> None:
-    cfg_file = tmp_path / "qwen-options.yaml"
+def test_load_config_normalizes_supported_backend_id(tmp_path) -> None:
+    cfg_file = tmp_path / "backend.yaml"
+    cfg_file.write_text("asr:\n  backend: ' FUNASR_WS '\n", encoding="utf-8")
+
+    assert load_config(cfg_file).asr.backend == "funasr_ws"
+
+
+def test_load_config_rejects_unsupported_backend(tmp_path) -> None:
+    cfg_file = tmp_path / "backend.yaml"
+    cfg_file.write_text("asr:\n  backend: qwen\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsupported asr backend: qwen"):
+        load_config(cfg_file)
+
+
+def test_load_config_supports_funasr_protocol_settings(tmp_path) -> None:
+    cfg_file = tmp_path / "funasr-options.yaml"
     cfg_file.write_text(
         "asr:\n"
-        "  backend: qwen_vllm\n"
-        "  qwen:\n"
-        "    model: Qwen/Qwen3-ASR-1.7B\n"
-        "    realtime: true\n"
-        "    gpu_memory_utilization: 0.65\n",
+        "  backend: funasr_ws\n"
+        "  funasr:\n"
+        "    mode: 2pass\n"
+        "    chunk_size: [0, 10, 5]\n"
+        "    chunk_interval: 10\n"
+        "    encoder_chunk_look_back: 4\n"
+        "    decoder_chunk_look_back: 1\n"
+        "    itn: false\n",
         encoding="utf-8",
     )
 
     cfg = load_config(cfg_file)
 
-    assert cfg.asr.qwen_model == "Qwen/Qwen3-ASR-1.7B"
-    assert cfg.asr.qwen_realtime is True
-    assert cfg.asr.qwen_gpu_memory_utilization == 0.65
-    assert cfg.asr.qwen_max_model_len == 32768
-
-
-def test_load_config_supports_qwen_max_model_len_setting(tmp_path) -> None:
-    cfg_file = tmp_path / "qwen-max-len.yaml"
-    cfg_file.write_text(
-        "asr:\n  qwen:\n    max_model_len: 24576\n",
-        encoding="utf-8",
-    )
-
-    cfg = load_config(cfg_file)
-
-    assert cfg.asr.qwen_model == "Qwen/Qwen3-ASR-1.7B"
-    assert cfg.asr.qwen_max_model_len == 24576
+    assert cfg.asr.funasr_mode == "2pass"
+    assert cfg.asr.funasr_chunk_size == (0, 10, 5)
+    assert cfg.asr.funasr_chunk_interval == 10
+    assert cfg.asr.funasr_encoder_chunk_look_back == 4
+    assert cfg.asr.funasr_decoder_chunk_look_back == 1
+    assert cfg.asr.funasr_itn is False
 
 
 def test_load_config_applies_runtime_reconnect_env_overrides(tmp_path, monkeypatch) -> None:
@@ -152,8 +151,6 @@ def test_load_config_applies_runtime_reconnect_env_overrides(tmp_path, monkeypat
 
     assert cfg.asr.reconnect_initial_s == 3.25
     assert cfg.asr.reconnect_max_s == 11.5
-    assert cfg.asr.runtime_reconnect_initial_s == 3.25
-    assert cfg.asr.runtime_reconnect_max_s == 11.5
 
 
 def test_app_config_is_frozen(app_config: AppConfig):
@@ -169,8 +166,9 @@ def test_app_config_is_frozen(app_config: AppConfig):
         ("audio_engine", {"sample_rate": 0}, "audio_engine.sample_rate"),
         ("audio_engine", {"max_queue_size": 0}, "audio_engine.max_queue_size"),
         ("capture", {"vad_speech_threshold": 1.5}, "capture.vad_speech_threshold"),
-        ("asr", {"runtime_reconnect_max_s": 0.5}, "asr.runtime_reconnect_max_s"),
+        ("asr", {"reconnect_max_s": 0.5}, "asr.reconnect_max_s"),
         ("asr", {"external_path": "not-slash"}, "asr.external_path"),
+        ("asr", {"funasr_chunk_size": (5, 0, 5)}, r"asr.funasr.chunk_size\[1\]"),
     ],
 )
 def test_app_config_validation_rejects_invalid_values(
@@ -232,7 +230,73 @@ def test_load_config_raises_when_wake_rule_item_is_not_mapping(tmp_path) -> None
     cfg_file = tmp_path / "bad_rules.yaml"
     cfg_file.write_text("wake:\n  rules:\n    - alexa\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="wake.rules items must be mappings"):
+    with pytest.raises(ValueError, match=r"config key must be a mapping: wake\.rules\[0\]"):
+        load_config(cfg_file)
+
+
+@pytest.mark.parametrize(
+    ("yaml_text", "unknown_key"),
+    [
+        ("unexpected: true\n", "unexpected"),
+        ("asr:\n  external:\n    hostname: localhost\n", "asr.external.hostname"),
+        ("wake:\n  threshold: 0.4\n", "wake.threshold"),
+        ("storage:\n  store_final_only: true\n", "storage.store_final_only"),
+        (
+            "wake:\n  rules:\n    - keyword: alexa\n      threshhold: 0.4\n",
+            "wake.rules[0].threshhold",
+        ),
+    ],
+)
+def test_load_config_rejects_unknown_yaml_keys(
+    tmp_path,
+    yaml_text: str,
+    unknown_key: str,
+) -> None:
+    cfg_file = tmp_path / "unknown.yaml"
+    cfg_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc_info:
+        load_config(cfg_file)
+    assert str(exc_info.value) == f"unknown config key: {unknown_key}"
+
+
+@pytest.mark.parametrize(
+    ("yaml_text", "message"),
+    [
+        ("wake: false\n", "config key must be a mapping: wake"),
+        ("wake:\n  rules: false\n", "config key must be a list: wake.rules"),
+    ],
+)
+def test_load_config_reports_invalid_container_types(
+    tmp_path,
+    yaml_text: str,
+    message: str,
+) -> None:
+    cfg_file = tmp_path / "invalid-shape.yaml"
+    cfg_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        load_config(cfg_file)
+
+
+@pytest.mark.parametrize(
+    ("env_name", "value"),
+    [
+        ("VOXKEEP_ASR_EXTERNAL_PORT", "not-a-port"),
+        ("VOXKEEP_INJECTOR_AUTO_ENTER", "maybe"),
+    ],
+)
+def test_load_config_reports_invalid_environment_values(
+    tmp_path,
+    monkeypatch,
+    env_name: str,
+    value: str,
+) -> None:
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setenv(env_name, value)
+
+    with pytest.raises(ValueError, match=f"invalid value for {env_name}"):
         load_config(cfg_file)
 
 

@@ -11,7 +11,8 @@ import sqlite3
 import threading
 import time
 
-from voxkeep.shared.events import StorageRecord
+from voxkeep.modules.storage.contracts import StorageEvent, StorageRecord
+from voxkeep.shared.events import AsrFinalEvent
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class SqliteStorageWorker:
 
     def __init__(
         self,
-        in_queue: queue.Queue[StorageRecord],
+        in_queue: queue.Queue[StorageEvent],
         stop_event: threading.Event,
         sqlite_path: str,
         jsonl_debug_path: str | None = None,
@@ -113,12 +114,14 @@ class SqliteStorageWorker:
         try:
             while not self._stop_event.is_set() or not self._in_queue.empty():
                 try:
-                    record = self._in_queue.get(timeout=_QUEUE_GET_TIMEOUT_S)
+                    event = self._in_queue.get(timeout=_QUEUE_GET_TIMEOUT_S)
                 except queue.Empty:
                     flush_pending()
                     continue
 
-                created_at = record.created_at or datetime.now(tz=timezone.utc).isoformat()
+                record = _normalize_event(event)
+
+                created_at = record.created_at
                 conn.execute(
                     """
                     INSERT INTO asr_segments (source, text, start_ts, end_ts, is_final, created_at, meta_json)
@@ -129,7 +132,7 @@ class SqliteStorageWorker:
                         record.text,
                         record.start_ts,
                         record.end_ts,
-                        1 if record.is_final else 0,
+                        1,
                         created_at,
                         record.meta_json,
                     ),
@@ -145,7 +148,7 @@ class SqliteStorageWorker:
                                 "text": record.text,
                                 "start_ts": record.start_ts,
                                 "end_ts": record.end_ts,
-                                "is_final": record.is_final,
+                                "is_final": True,
                                 "created_at": created_at,
                                 "meta_json": record.meta_json,
                             },
@@ -161,3 +164,15 @@ class SqliteStorageWorker:
                 jsonl_file.close()
             conn.close()
             logger.info("storage worker stopped writes=%s", self._count)
+
+
+def _normalize_event(event: StorageEvent) -> StorageRecord:
+    """Convert a pipeline event into the storage module's row model."""
+    source = "stream" if isinstance(event, AsrFinalEvent) else "capture"
+    return StorageRecord(
+        source=source,
+        text=event.text,
+        start_ts=event.start_ts,
+        end_ts=event.end_ts,
+        created_at=datetime.now(tz=timezone.utc).isoformat(),
+    )

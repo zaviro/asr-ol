@@ -1,0 +1,582 @@
+{
+  "pyproject.toml": {
+    "mtime": 1784352282.915242,
+    "ast_hash": "f8478c4f878b02bd0adb76b607b34bbd",
+    "semantic_hash": ""
+  },
+  "scripts/check_env.sh": {
+    "mtime": 1784353304.9456186,
+    "ast_hash": "55d60050ceb2eac9d2a2b9980335f439",
+    "semantic_hash": ""
+  },
+  "scripts/check_runtime_ai.py": {
+    "mtime": 1774984977.692008,
+    "ast_hash": "71b7348e28de6e48039a61b7d9d940fc",
+    "semantic_hash": "71b7348e28de6e48039a61b7d9d940fc"
+  },
+  "scripts/run_local.sh": {
+    "mtime": 1784346771.1525803,
+    "ast_hash": "04e933efb50bee6c7d72ec6bdfddda08",
+    "semantic_hash": "04e933efb50bee6c7d72ec6bdfddda08"
+  },
+  "scripts/setup_openwakeword_models.py": {
+    "mtime": 1774984977.692008,
+    "ast_hash": "b935bec2b4cab8b1c11b078caa0fe19c",
+    "semantic_hash": "b935bec2b4cab8b1c11b078caa0fe19c"
+  },
+  "src/voxkeep/__init__.py": {
+    "mtime": 1774984977.692008,
+    "ast_hash": "2796a7cb38c87f6a798730c01a48e14e",
+    "semantic_hash": "2796a7cb38c87f6a798730c01a48e14e"
+  },
+  "src/voxkeep/__main__.py": {
+    "mtime": 1774984977.6930082,
+    "ast_hash": "1df05c91c341fee9ede17892c540a895",
+    "semantic_hash": "1df05c91c341fee9ede17892c540a895"
+  },
+  "src/voxkeep/bootstrap/__init__.py": {
+    "mtime": 1774984977.6938038,
+    "ast_hash": "ea1b8ff5193073c8828195dee20b8e89",
+    "semantic_hash": "ea1b8ff5193073c8828195dee20b8e89"
+  },
+  "src/voxkeep/bootstrap/runtime_app.py": {
+    "mtime": 1784354118.0712504,
+    "ast_hash": "16b4b070208925477ac33045a7e9c882",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/bootstrap/shutdown.py": {
+    "mtime": 1774984977.6940284,
+    "ast_hash": "f7862e13f82ecbaf5230d1cb6a98bfbf",
+    "semantic_hash": "f7862e13f82ecbaf5230d1cb6a98bfbf"
+  },
+  "src/voxkeep/cli/__init__.py": {
+    "mtime": 1774984977.6940284,
+    "ast_hash": "ca8da8e7115855c332b0ea6370e53555",
+    "semantic_hash": "ca8da8e7115855c332b0ea6370e53555"
+  },
+  "src/voxkeep/cli/main.py": {
+    "mtime": 1784354508.872682,
+    "ast_hash": "cc7d93b24fd1b222f691401f7c8d7b47",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/__init__.py": {
+    "mtime": 1774984977.6947894,
+    "ast_hash": "407c4c6818e43e4bc5fda5d2a9005554",
+    "semantic_hash": "407c4c6818e43e4bc5fda5d2a9005554"
+  },
+  "src/voxkeep/modules/audio_engine/__init__.py": {
+    "mtime": 1777285139.1512697,
+    "ast_hash": "6da5ddeac3de1a0197db668b83f39958",
+    "semantic_hash": "6da5ddeac3de1a0197db668b83f39958"
+  },
+  "src/voxkeep/modules/audio_engine/infrastructure/__init__.py": {
+    "mtime": 1784354633.1616855,
+    "ast_hash": "3eafacb785cf437209ee45f06d69e218",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/audio_engine/infrastructure/audio_bus.py": {
+    "mtime": 1777285139.1528637,
+    "ast_hash": "15fa9ee357c67ea4ff450bbca1f1ce0c",
+    "semantic_hash": "15fa9ee357c67ea4ff450bbca1f1ce0c"
+  },
+  "src/voxkeep/modules/audio_engine/infrastructure/audio_capture.py": {
+    "mtime": 1784352282.914242,
+    "ast_hash": "94c981fb01561d5bad9bbb5a7486b7aa",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/audio_engine/infrastructure/preprocess.py": {
+    "mtime": 1777285139.1528637,
+    "ast_hash": "61ff3d059fb2a21f1ed29ce83518f1d1",
+    "semantic_hash": "61ff3d059fb2a21f1ed29ce83518f1d1"
+  },
+  "src/voxkeep/modules/audio_engine/public.py": {
+    "mtime": 1784354625.8206162,
+    "ast_hash": "1b1d385ed2fb33ca94736b09fe88f0a2",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/capture/__init__.py": {
+    "mtime": 1774984977.6952875,
+    "ast_hash": "62b7066070405546bd476176939736c4",
+    "semantic_hash": "62b7066070405546bd476176939736c4"
+  },
+  "src/voxkeep/modules/capture/application/__init__.py": {
+    "mtime": 1774984977.6953802,
+    "ast_hash": "01e16f9f69723bef6b9435ed5495c7f9",
+    "semantic_hash": "01e16f9f69723bef6b9435ed5495c7f9"
+  },
+  "src/voxkeep/modules/capture/application/transcript_extractor.py": {
+    "mtime": 1784354669.9340498,
+    "ast_hash": "7e78ddd0c0578d905510d8a67ff00df9",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/capture/domain/__init__.py": {
+    "mtime": 1774984977.6954749,
+    "ast_hash": "f852fd8aa904b7f89d09c81238821d81",
+    "semantic_hash": "f852fd8aa904b7f89d09c81238821d81"
+  },
+  "src/voxkeep/modules/capture/domain/capture_fsm.py": {
+    "mtime": 1774984977.6958156,
+    "ast_hash": "6b17c9ce9e3634fcea45a81d33ab2592",
+    "semantic_hash": "6b17c9ce9e3634fcea45a81d33ab2592"
+  },
+  "src/voxkeep/modules/capture/infrastructure/__init__.py": {
+    "mtime": 1774984977.6958156,
+    "ast_hash": "eb9bcbcb6729d9172753d007e8604836",
+    "semantic_hash": "eb9bcbcb6729d9172753d007e8604836"
+  },
+  "src/voxkeep/modules/capture/infrastructure/openwakeword_worker.py": {
+    "mtime": 1784352085.3936234,
+    "ast_hash": "8f290b9446820a15aabf42b55a1cf6eb",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/capture/infrastructure/silero_worker.py": {
+    "mtime": 1784352085.3936234,
+    "ast_hash": "5c3c6505828ec9a9348a4a561722c696",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/capture/public.py": {
+    "mtime": 1784352754.4149616,
+    "ast_hash": "682afba8bb24bcdaafa1db471eaef924",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/injection/__init__.py": {
+    "mtime": 1774984977.6960168,
+    "ast_hash": "82a3ddfe8aca0326224cf75870f7176f",
+    "semantic_hash": "82a3ddfe8aca0326224cf75870f7176f"
+  },
+  "src/voxkeep/modules/injection/infrastructure/__init__.py": {
+    "mtime": 1774984977.6968205,
+    "ast_hash": "a18d1e97856923f932e6427b2d20c8ad",
+    "semantic_hash": "a18d1e97856923f932e6427b2d20c8ad"
+  },
+  "src/voxkeep/modules/injection/infrastructure/base.py": {
+    "mtime": 1774984977.6970327,
+    "ast_hash": "98e03da4772b8b99a90ca1279b9bef50",
+    "semantic_hash": "98e03da4772b8b99a90ca1279b9bef50"
+  },
+  "src/voxkeep/modules/injection/infrastructure/factory.py": {
+    "mtime": 1777285139.1532698,
+    "ast_hash": "fe356ea30a31a210b3fc9e808d0a3b51",
+    "semantic_hash": "fe356ea30a31a210b3fc9e808d0a3b51"
+  },
+  "src/voxkeep/modules/injection/infrastructure/injector_worker.py": {
+    "mtime": 1784353087.5717416,
+    "ast_hash": "5fc984c60f789ab122657489865cba72",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/injection/infrastructure/xdotool_injector.py": {
+    "mtime": 1774984977.6970327,
+    "ast_hash": "3bb9d419704c2b1530827ec5e38b826f",
+    "semantic_hash": "3bb9d419704c2b1530827ec5e38b826f"
+  },
+  "src/voxkeep/modules/injection/infrastructure/ydotool_injector.py": {
+    "mtime": 1774984977.6970327,
+    "ast_hash": "f3e10d952a067f29e9f6c58f10f4f879",
+    "semantic_hash": "f3e10d952a067f29e9f6c58f10f4f879"
+  },
+  "src/voxkeep/modules/injection/public.py": {
+    "mtime": 1784351928.3102598,
+    "ast_hash": "c525edd2e45afc093ac112b7ba5cbd19",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/storage/__init__.py": {
+    "mtime": 1774984977.697722,
+    "ast_hash": "c2566cc4346806dbff0a66dbe4a1e2c1",
+    "semantic_hash": "c2566cc4346806dbff0a66dbe4a1e2c1"
+  },
+  "src/voxkeep/modules/storage/contracts.py": {
+    "mtime": 1784354669.9350498,
+    "ast_hash": "408a3baa0ac68e25ea21182f6f85c70a",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/storage/infrastructure/__init__.py": {
+    "mtime": 1774984977.6982052,
+    "ast_hash": "cc6dc00e6b970192ee011cc17b158a6e",
+    "semantic_hash": "cc6dc00e6b970192ee011cc17b158a6e"
+  },
+  "src/voxkeep/modules/storage/infrastructure/sqlite_storage_worker.py": {
+    "mtime": 1784354669.9350498,
+    "ast_hash": "8a0a1ec8ebb2a55683f65277cf91dac8",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/storage/public.py": {
+    "mtime": 1784351928.3102598,
+    "ast_hash": "ac2af746dbcccf2db7e9b7d47cde2d47",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/transcription/__init__.py": {
+    "mtime": 1774984977.698387,
+    "ast_hash": "cd84cc620643c5e86df92f54d10a730b",
+    "semantic_hash": "cd84cc620643c5e86df92f54d10a730b"
+  },
+  "src/voxkeep/modules/transcription/contracts.py": {
+    "mtime": 1784353087.5737417,
+    "ast_hash": "ed09a160c59a259cbec6a9d8851d4acd",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/transcription/infrastructure/__init__.py": {
+    "mtime": 1774984977.6987114,
+    "ast_hash": "62043e546c0dd745f2be595d584680bb",
+    "semantic_hash": "62043e546c0dd745f2be595d584680bb"
+  },
+  "src/voxkeep/modules/transcription/infrastructure/funasr_ws.py": {
+    "mtime": 1784353860.0138807,
+    "ast_hash": "7582b8218ee89d5acfb2d50a6a1468dc",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/transcription/public.py": {
+    "mtime": 1784352935.971526,
+    "ast_hash": "a38c7c3930e40f0b83f0afb006fefdcf",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/shared/__init__.py": {
+    "mtime": 1774984977.6988797,
+    "ast_hash": "4a4a45a388875c6c21c4582a5feb9b26",
+    "semantic_hash": "4a4a45a388875c6c21c4582a5feb9b26"
+  },
+  "src/voxkeep/shared/asr_health.py": {
+    "mtime": 1784353243.147206,
+    "ast_hash": "27fd74de346d4bc612e7af1d929463a9",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/shared/config.py": {
+    "mtime": 1777285139.1552696,
+    "ast_hash": "9e1c72db1d2a6cde0f426fe81407bf26",
+    "semantic_hash": "9e1c72db1d2a6cde0f426fe81407bf26"
+  },
+  "src/voxkeep/shared/config_loader.py": {
+    "mtime": 1784354479.117501,
+    "ast_hash": "8d726ca48ac68372f9db9b392960116f",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/shared/config_schema.py": {
+    "mtime": 1784354582.543232,
+    "ast_hash": "3edd96888f4fbabace64885dfe8076a8",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/shared/events.py": {
+    "mtime": 1784354669.9340498,
+    "ast_hash": "73564face4dbe216c900d56e7987a7a1",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/shared/logging_setup.py": {
+    "mtime": 1774984977.6992671,
+    "ast_hash": "60bc32a26604eff514cade6db1151677",
+    "semantic_hash": "60bc32a26604eff514cade6db1151677"
+  },
+  "src/voxkeep/shared/queue_utils.py": {
+    "mtime": 1774984977.6992671,
+    "ast_hash": "ecfe57dc46a6cf51decf32cf959bd84d",
+    "semantic_hash": "ecfe57dc46a6cf51decf32cf959bd84d"
+  },
+  "tests/architecture/test_final_shape.py": {
+    "mtime": 1784354313.8120074,
+    "ast_hash": "50063fd7fb18df2bde9730597c4fc5d6",
+    "semantic_hash": ""
+  },
+  "tests/architecture/test_module_dependencies.py": {
+    "mtime": 1784353025.0703938,
+    "ast_hash": "331cb5cf9ed7312a3cf5b92c54ce89c2",
+    "semantic_hash": ""
+  },
+  "tests/architecture/test_module_layout.py": {
+    "mtime": 1784352548.9174645,
+    "ast_hash": "d78af3ae1e961b3e65f061b23c46bf65",
+    "semantic_hash": ""
+  },
+  "tests/architecture/test_test_layout.py": {
+    "mtime": 1777285139.1562698,
+    "ast_hash": "b7a031abdda19663d44d9864a1a15534",
+    "semantic_hash": "b7a031abdda19663d44d9864a1a15534"
+  },
+  "tests/conftest.py": {
+    "mtime": 1784352407.0035183,
+    "ast_hash": "3327bc1d49ebb66820c906aa8a1a4825",
+    "semantic_hash": ""
+  },
+  "tests/e2e/test_cli_help.py": {
+    "mtime": 1774984977.6999514,
+    "ast_hash": "1b776fc36d752f48dbc4fa6c3277baea",
+    "semantic_hash": "1b776fc36d752f48dbc4fa6c3277baea"
+  },
+  "tests/integration/test_audio_bus.py": {
+    "mtime": 1777285139.1562698,
+    "ast_hash": "0fb0095c589d3bcca5fc1e0e2eae27f1",
+    "semantic_hash": "0fb0095c589d3bcca5fc1e0e2eae27f1"
+  },
+  "tests/integration/test_audio_capture.py": {
+    "mtime": 1777285139.1562698,
+    "ast_hash": "d47bae3c330eb85897b9c9cef751fc65",
+    "semantic_hash": "d47bae3c330eb85897b9c9cef751fc65"
+  },
+  "tests/integration/test_openclaw_real_call.py": {
+    "mtime": 1784352885.9065077,
+    "ast_hash": "10d8fa943beafb6b54b18a6533543109",
+    "semantic_hash": ""
+  },
+  "tests/integration/test_shutdown.py": {
+    "mtime": 1774984977.7010078,
+    "ast_hash": "468a3a54d7ad5f87b05e8c6143e8654f",
+    "semantic_hash": "468a3a54d7ad5f87b05e8c6143e8654f"
+  },
+  "tests/integration/test_smoke_import.py": {
+    "mtime": 1774984977.7010078,
+    "ast_hash": "2b5fb90e4e2e0fe1c6e804d7ee764b86",
+    "semantic_hash": "2b5fb90e4e2e0fe1c6e804d7ee764b86"
+  },
+  "tests/integration/test_storage_worker.py": {
+    "mtime": 1784354709.0494668,
+    "ast_hash": "106c0801d2e3676a436bb9de533ad4a7",
+    "semantic_hash": ""
+  },
+  "tests/integration/test_wake_vad_workers.py": {
+    "mtime": 1777285139.1572697,
+    "ast_hash": "f2be668eb1606d30ba91b9d49df1134c",
+    "semantic_hash": "f2be668eb1606d30ba91b9d49df1134c"
+  },
+  "tests/unit/bootstrap/test_runtime_app.py": {
+    "mtime": 1784354124.3954074,
+    "ast_hash": "334a49cd71735ad936ce206abb6c41e4",
+    "semantic_hash": ""
+  },
+  "tests/unit/bootstrap/test_signal_shutdown.py": {
+    "mtime": 1777285139.1584895,
+    "ast_hash": "87d503b409c1e676ca40a624ca23db4a",
+    "semantic_hash": "87d503b409c1e676ca40a624ca23db4a"
+  },
+  "tests/unit/cli/test_main.py": {
+    "mtime": 1784354549.3689673,
+    "ast_hash": "7307a1f92d8d42a0c4d36d7bf24c33be",
+    "semantic_hash": ""
+  },
+  "tests/unit/modules/capture/test_capture_fsm.py": {
+    "mtime": 1778260017.5659554,
+    "ast_hash": "39b8f70eb3e4258122156c3da2dc2fde",
+    "semantic_hash": "39b8f70eb3e4258122156c3da2dc2fde"
+  },
+  "tests/unit/modules/capture/test_capture_public_api.py": {
+    "mtime": 1784353993.997178,
+    "ast_hash": "832282a882357f2355f10c0804d2643c",
+    "semantic_hash": ""
+  },
+  "tests/unit/modules/capture/test_capture_worker_routing.py": {
+    "mtime": 1784352885.9055076,
+    "ast_hash": "eb7763b44d6f2021f5f1a623434b477a",
+    "semantic_hash": ""
+  },
+  "tests/unit/modules/capture/test_openwakeword_scorer.py": {
+    "mtime": 1777285139.1584895,
+    "ast_hash": "679d70dabf91b95e5ea17af7d8e9ff10",
+    "semantic_hash": "679d70dabf91b95e5ea17af7d8e9ff10"
+  },
+  "tests/unit/modules/capture/test_silero_vad_scorer.py": {
+    "mtime": 1777285139.1584895,
+    "ast_hash": "78edb07912eb082fb9d6862fd154f737",
+    "semantic_hash": "78edb07912eb082fb9d6862fd154f737"
+  },
+  "tests/unit/modules/capture/test_transcript_extractor.py": {
+    "mtime": 1777285139.1584895,
+    "ast_hash": "98e4974ea7c27915392411cd16c4c7c7",
+    "semantic_hash": "98e4974ea7c27915392411cd16c4c7c7"
+  },
+  "tests/unit/modules/injection/test_injection_public_api.py": {
+    "mtime": 1784352407.0055184,
+    "ast_hash": "326e1fd7ce80ec04b5f42da2e3a42723",
+    "semantic_hash": ""
+  },
+  "tests/unit/modules/injection/test_injector_factory.py": {
+    "mtime": 1778260017.5659554,
+    "ast_hash": "64d17bdbecbd052efed2bced31cfe109",
+    "semantic_hash": "64d17bdbecbd052efed2bced31cfe109"
+  },
+  "tests/unit/modules/injection/test_injector_worker_actions.py": {
+    "mtime": 1777285139.1592698,
+    "ast_hash": "88f3860d090ac306090ef2320a5df334",
+    "semantic_hash": "88f3860d090ac306090ef2320a5df334"
+  },
+  "tests/unit/modules/injection/test_xdotool_injector.py": {
+    "mtime": 1777285139.1592698,
+    "ast_hash": "ca43ff7319cae9ecb4eb9f13547ae5a9",
+    "semantic_hash": "ca43ff7319cae9ecb4eb9f13547ae5a9"
+  },
+  "tests/unit/modules/injection/test_ydotool_injector.py": {
+    "mtime": 1777285139.1592698,
+    "ast_hash": "e33d25e55a520845904ebb5e7b3f961e",
+    "semantic_hash": "e33d25e55a520845904ebb5e7b3f961e"
+  },
+  "tests/unit/modules/storage/test_sqlite_storage_worker.py": {
+    "mtime": 1777285139.1602697,
+    "ast_hash": "605ce87856451368771586903d6fd05e",
+    "semantic_hash": "605ce87856451368771586903d6fd05e"
+  },
+  "tests/unit/modules/transcription/test_asr_worker.py": {
+    "mtime": 1784354701.9163885,
+    "ast_hash": "d5507558b589dcce7f246bfe50663df6",
+    "semantic_hash": ""
+  },
+  "tests/unit/modules/transcription/test_funasr_ws.py": {
+    "mtime": 1784353887.1065457,
+    "ast_hash": "e4051f404f37a119bcfac45e251b753a",
+    "semantic_hash": ""
+  },
+  "tests/unit/modules/transcription/test_transcription_public_api.py": {
+    "mtime": 1784354525.929797,
+    "ast_hash": "c3cf2e538e3bc5ee18e3eca1bca5c2ca",
+    "semantic_hash": ""
+  },
+  "tests/unit/shared/test_asr_health.py": {
+    "mtime": 1784353323.015035,
+    "ast_hash": "c2c13c0ef69da6207e49c5254e0eb558",
+    "semantic_hash": ""
+  },
+  "tests/unit/shared/test_config.py": {
+    "mtime": 1784354576.31118,
+    "ast_hash": "4126280eb4cbf59c3c3f858742c02c31",
+    "semantic_hash": ""
+  },
+  "tests/unit/shared/test_events.py": {
+    "mtime": 1784354701.9163885,
+    "ast_hash": "2aa5a6e63fda0c4339ddad6796033212",
+    "semantic_hash": ""
+  },
+  "tests/unit/shared/test_queue_utils.py": {
+    "mtime": 1777285139.1631248,
+    "ast_hash": "e9c9c2af9d84c91de3f7061babadade2",
+    "semantic_hash": "e9c9c2af9d84c91de3f7061babadade2"
+  },
+  ".codex/skills/graphify/SKILL.md": {
+    "mtime": 1784347454.1778595,
+    "ast_hash": "8e69c0111411fc9d5560ad5fe5ba3476",
+    "semantic_hash": "8e69c0111411fc9d5560ad5fe5ba3476"
+  },
+  ".codex/skills/graphify/references/add-watch.md": {
+    "mtime": 1784347453.338585,
+    "ast_hash": "d59d027fe449f06aa03905a01184e779",
+    "semantic_hash": "d59d027fe449f06aa03905a01184e779"
+  },
+  ".codex/skills/graphify/references/exports.md": {
+    "mtime": 1784347453.338585,
+    "ast_hash": "9da2a2152e60a22f07f05fed5158f287",
+    "semantic_hash": "9da2a2152e60a22f07f05fed5158f287"
+  },
+  ".codex/skills/graphify/references/extraction-spec.md": {
+    "mtime": 1784347453.338585,
+    "ast_hash": "bf895ec4d4e40f5f66f7d31c2a9bd4a7",
+    "semantic_hash": "bf895ec4d4e40f5f66f7d31c2a9bd4a7"
+  },
+  ".codex/skills/graphify/references/github-and-merge.md": {
+    "mtime": 1784347453.338585,
+    "ast_hash": "cde13df085e4c492aeb7ba298a996d0d",
+    "semantic_hash": "cde13df085e4c492aeb7ba298a996d0d"
+  },
+  ".codex/skills/graphify/references/hooks.md": {
+    "mtime": 1784347453.3396945,
+    "ast_hash": "3f545db6ce646650bb9de588f5512a27",
+    "semantic_hash": "3f545db6ce646650bb9de588f5512a27"
+  },
+  ".codex/skills/graphify/references/query.md": {
+    "mtime": 1784347453.3396945,
+    "ast_hash": "3c46f8ad006874260614ed8657d02307",
+    "semantic_hash": "3c46f8ad006874260614ed8657d02307"
+  },
+  ".codex/skills/graphify/references/transcribe.md": {
+    "mtime": 1784347453.3396945,
+    "ast_hash": "67b6a5fa6c0974e18f60db9f8932fbd8",
+    "semantic_hash": "67b6a5fa6c0974e18f60db9f8932fbd8"
+  },
+  ".codex/skills/graphify/references/update.md": {
+    "mtime": 1784347453.3396945,
+    "ast_hash": "c698309979460d0f02ba616417844399",
+    "semantic_hash": "c698309979460d0f02ba616417844399"
+  },
+  ".github/actions/setup/action.yml": {
+    "mtime": 1778259825.158242,
+    "ast_hash": "8f15e8672cbef6dc08587b9d14441bba",
+    "semantic_hash": "8f15e8672cbef6dc08587b9d14441bba"
+  },
+  ".github/dependabot.yml": {
+    "mtime": 1778259666.6095338,
+    "ast_hash": "4334132ba6bcd78670bf574b6b4236f4",
+    "semantic_hash": "4334132ba6bcd78670bf574b6b4236f4"
+  },
+  ".github/workflows/ci.yml": {
+    "mtime": 1784355025.8377254,
+    "ast_hash": "294cab5aafbc2d5d2ca3c1da8a252e80",
+    "semantic_hash": ""
+  },
+  ".pre-commit-config.yaml": {
+    "mtime": 1778259738.5979342,
+    "ast_hash": "a50e7667ee341228569709faa5e525c7",
+    "semantic_hash": "a50e7667ee341228569709faa5e525c7"
+  },
+  "AGENTS.md": {
+    "mtime": 1784356765.7072992,
+    "ast_hash": "93196e4875648c3321326c82d32485ea",
+    "semantic_hash": ""
+  },
+  "CHANGELOG.md": {
+    "mtime": 1780896415.1999867,
+    "ast_hash": "2437594bcb7ae8ca99a6416c940140d1",
+    "semantic_hash": "2437594bcb7ae8ca99a6416c940140d1"
+  },
+  "CONTRIBUTING.md": {
+    "mtime": 1784356731.660725,
+    "ast_hash": "76b71543d76fd715114f38ee2a837e96",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1784356655.8414676,
+    "ast_hash": "0194928ecf82a0c0d3b994eae8c9fb9c",
+    "semantic_hash": ""
+  },
+  "config/config.yaml": {
+    "mtime": 1784352257.5820403,
+    "ast_hash": "52fe2c80d7dcdaa6fbc9493914389d9b",
+    "semantic_hash": ""
+  },
+  "docker-compose.yml": {
+    "mtime": 1784346771.1515803,
+    "ast_hash": "c80310960e93de89c8321e2173dd6b64",
+    "semantic_hash": "c80310960e93de89c8321e2173dd6b64"
+  },
+  "docs/funasr-runtime-baseline.md": {
+    "mtime": 1784351778.5071115,
+    "ast_hash": "4ceca828678636ec125aace39fafe16d",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/capture/worker.py": {
+    "mtime": 1784353966.9775114,
+    "ast_hash": "991d3e11722a3075a580e3a206c009a2",
+    "semantic_hash": ""
+  },
+  "src/voxkeep/modules/transcription/worker.py": {
+    "mtime": 1784354669.9340498,
+    "ast_hash": "4f981ebe36c999f830bab77fa9fd9f6d",
+    "semantic_hash": ""
+  },
+  "tests/architecture/test_resource_boundaries.py": {
+    "mtime": 1784353653.3198504,
+    "ast_hash": "4c4a4782341ee34175b7aec32a1168cf",
+    "semantic_hash": ""
+  },
+  "tests/unit/modules/audio_engine/test_audio_engine_public.py": {
+    "mtime": 1784354110.6220655,
+    "ast_hash": "7758e6a7938faf8b9a72736715bc3f97",
+    "semantic_hash": ""
+  },
+  "tests/unit/shared/test_check_env.py": {
+    "mtime": 1784353340.879448,
+    "ast_hash": "195551fb132cd0e139c331de6695347b",
+    "semantic_hash": ""
+  },
+  "docs/architecture.md": {
+    "mtime": 1784356765.7072992,
+    "ast_hash": "5f4df6d91e56f41ae5315b8936c5e77b",
+    "semantic_hash": ""
+  },
+  "docs/operations.md": {
+    "mtime": 1784356731.660725,
+    "ast_hash": "b35b3331c08c7a407fcbfe00314d610f",
+    "semantic_hash": ""
+  }
+}

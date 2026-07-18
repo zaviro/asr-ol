@@ -1,14 +1,9 @@
 name: Setup
-description: "Checkout (with persist-credentials: false), Python 3.11, uv with cache"
+description: "Set up Python 3.11 and uv with cache after checkout"
 
 runs:
   using: composite
   steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        persist-credentials: false
-
     - name: Setup Python
       uses: actions/setup-python@v5
       with:

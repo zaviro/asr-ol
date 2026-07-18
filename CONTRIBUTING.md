@@ -1,91 +1,94 @@
 # Contributing
 
-## Development Setup
+## Setup
 
-1. Install Python `3.11` and `uv`.
-2. Sync dependencies:
+Install Python 3.11 and `uv`, then sync the development environment:
 
 ```bash
 make sync
 ```
 
-3. Optional runtime-ai dependencies:
+Runtime, audio, wake, or VAD work also needs the AI dependencies and model assets:
 
 ```bash
-make sync-ai
-```
-
-4. Validate local environment and config before runtime work:
-
-```bash
-make doctor
+make setup-ai-models
 make validate-config
 ```
 
-5. If you need to honor `config/config.yaml` exactly, run the CLI directly:
+Run all project Python commands through `uv`; do not depend on a system Python or an activated
+shell environment. `make doctor` includes a live FunASR handshake, so run it only after the
+configured backend is reachable.
+
+## Before changing code
+
+Read [docs/architecture.md](docs/architecture.md). Keep changes inside the module that owns the
+behavior, and expose cross-module dependencies through that module's `public.py`.
+
+The following boundaries are non-negotiable:
+
+- Do not recreate runtime code under `core`, `infra`, or `services`.
+- Cross-module imports under `modules` must target the owning module's `public.py`; worker,
+  domain, application, contracts, and infrastructure files are internal.
+- `shared` must not import from `voxkeep.modules`.
+- Only `modules/audio_engine/infrastructure/audio_capture.py` may open microphones.
+- Only the storage module may write SQLite.
+- The supported ASR path is `funasr_ws`; do not restore Qwen/vLLM code or configuration.
+- Update tests and docs with intentional config, event, CLI, wake, or action semantic changes.
+
+## Quality gates
+
+Use the fast loop while editing:
 
 ```bash
-uv run --python 3.11 python -m voxkeep run --config config/config.yaml
+make fmt
+make lint
+make typecheck
+make test-fast
 ```
 
-`make run` is the primary way to start the local development runtime using the default `config/config.yaml`.
+Before opening a PR, run the repository quality gates:
 
-## Quality Gates
+```bash
+make precommit
+make typecheck
+make test
+make validate-config
+```
 
-Run these checks before opening a PR:
+Run `make test-integration` for worker coordination, queues, lifecycle, or runtime wiring. Run
+`make test-e2e` when CLI behavior or an end-to-end integration changes. Tests requiring real
+hardware or external services remain opt-in.
+
+For a single command that runs the standard developer checks:
 
 ```bash
 make cli-check
-make lint
-make test
-make typecheck
-make test-cov
 ```
 
-## Commit Convention
+## Testing style
 
-Use Conventional Commits:
+- Put pure logic, state machines, and narrow adapters in `tests/unit`.
+- Put dependency and package-boundary checks in `tests/architecture`.
+- Put threaded pipeline and shutdown behavior in `tests/integration`.
+- Put CLI and complete external flows in `tests/e2e`.
+- Prefer observable behavior over tests that mirror private implementation structure.
 
-- `feat: ...`
-- `fix: ...`
-- `refactor: ...`
-- `test: ...`
-- `chore: ...`
+## Runtime diagnostics
 
-Keep commits focused and atomic.
-
-## Pull Requests
-
-PRs should include:
-
-- Summary of changes and rationale.
-- Test evidence (commands + outcomes).
-- Config/runtime impact (ASR backend or endpoint, audio devices, wake model, injector backend) if relevant.
-
-## Testing Notes
-
-- Unit and integration tests are in `tests/unit` and `tests/integration`.
-- E2E tests are in `tests/e2e`; some require opt-in env vars.
-- `make doctor` is the preferred first-stop command when local runtime checks fail.
-- `make validate-config` validates `config/config.yaml` plus `VOXKEEP_*` environment overrides.
-- `backend current` and `backend doctor` are the preferred backend-specific checks before blaming runtime code:
+When a local runtime check fails, start with:
 
 ```bash
-uv run --python 3.11 python -m voxkeep backend current --config config/config.yaml
+make doctor
 uv run --python 3.11 python -m voxkeep backend doctor --config config/config.yaml
 ```
 
-`backend doctor` reports backend health classification and may return `assets_missing` before any live endpoint probe if the persisted asset state is absent.
+Deployment and troubleshooting details are in [docs/operations.md](docs/operations.md).
 
-- GPT-SoVITS E2E 使用预生成夹具，首次执行：
+## Commits and pull requests
 
-```bash
-.codex/skills/gptsovits-cli-tts/scripts/generate_test_fixtures.sh
-```
+Use focused Conventional Commits such as `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, and
+`chore:`. A pull request should include:
 
-- 默认 API 启动脚本：`~/workspace/gptsovits/scripts/start_api_cuda.sh`。
-- 运行 GPT-SoVITS 夹具 E2E：
-
-```bash
-VOXKEEP_RUN_GPTSOVITS_E2E=1 uv run --python 3.11 python -m pytest tests/e2e/test_pipeline_tts_audio.py -q
-```
+- The behavior and rationale for the change.
+- Commands run and their outcomes.
+- Any impact on configuration, endpoints, audio devices, wake models, injection, or persistence.

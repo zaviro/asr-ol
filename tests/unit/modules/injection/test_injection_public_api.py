@@ -3,101 +3,33 @@ from __future__ import annotations
 import queue
 import threading
 
-from voxkeep.modules.injection.contracts import InjectionResult
 from voxkeep.modules.injection.public import build_injection_module
 from voxkeep.shared.config import AppConfig
-from voxkeep.shared.events import CaptureCommand
 
 
-def test_injection_module_executes_capture_completed(monkeypatch, app_config: AppConfig) -> None:
-    monkeypatch.setattr(
-        "voxkeep.modules.injection.public.build_injector",
-        lambda _cfg: type("FakeInjector", (), {"inject": lambda self, text: text == "hello"})(),
-    )
-    module = build_injection_module(
-        in_queue=queue.Queue(),
-        stop_event=threading.Event(),
-        cfg=app_config.injector,
-    )
+def test_build_injection_module_wires_configured_worker(monkeypatch, app_config: AppConfig) -> None:
+    built: dict[str, object] = {}
+    injector = object()
+    worker = object()
 
-    result = module.execute_capture(
-        CaptureCommand(
-            session_id=1,
-            keyword="alexa",
-            action="inject_text",
-            text="hello",
-            start_ts=1.0,
-            end_ts=1.2,
-        )
-    )
+    monkeypatch.setattr("voxkeep.modules.injection.public.build_injector", lambda _cfg: injector)
 
-    assert result == InjectionResult(ok=True, action="inject_text")
+    def fake_worker(**kwargs):  # type: ignore[no-untyped-def]
+        built.update(kwargs)
+        return worker
 
-
-def test_injection_module_stop_sets_stop_event(monkeypatch, app_config: AppConfig) -> None:
-    monkeypatch.setattr(
-        "voxkeep.modules.injection.public.build_injector",
-        lambda _cfg: type("FakeInjector", (), {"inject": lambda self, text: True})(),
-    )
+    monkeypatch.setattr("voxkeep.modules.injection.public.InjectorWorker", fake_worker)
+    in_queue = queue.Queue()
     stop_event = threading.Event()
-    module = build_injection_module(
-        in_queue=queue.Queue(),
+
+    result = build_injection_module(
+        in_queue=in_queue,
         stop_event=stop_event,
         cfg=app_config.injector,
     )
 
-    module.stop()
-
-    assert stop_event.is_set() is True
-
-
-def test_injection_module_execute_capture_uses_public_worker_api(
-    monkeypatch, app_config: AppConfig
-) -> None:
-    class _FakeWorker:
-        def __init__(
-            self,
-            in_queue: queue.Queue[object],
-            stop_event: threading.Event,
-            injector: object,
-            openclaw_command: tuple[str, ...],
-            openclaw_timeout_s: float,
-        ) -> None:
-            _ = (in_queue, stop_event, injector, openclaw_command, openclaw_timeout_s)
-
-        def start(self) -> None:
-            return
-
-        def join(self, timeout: float | None = None) -> None:
-            _ = timeout
-
-        def is_alive(self) -> bool:
-            return True
-
-        def execute_command(self, cmd):  # type: ignore[no-untyped-def]
-            return cmd.action == "inject_text" and cmd.text == "hello"
-
-    monkeypatch.setattr(
-        "voxkeep.modules.injection.public.build_injector",
-        lambda _cfg: type("FakeInjector", (), {"inject": lambda self, text: True})(),
-    )
-    monkeypatch.setattr("voxkeep.modules.injection.public.InjectorWorker", _FakeWorker)
-
-    module = build_injection_module(
-        in_queue=queue.Queue(),
-        stop_event=threading.Event(),
-        cfg=app_config.injector,
-    )
-
-    result = module.execute_capture(
-        CaptureCommand(
-            session_id=1,
-            keyword="alexa",
-            action="inject_text",
-            text="hello",
-            start_ts=1.0,
-            end_ts=1.2,
-        )
-    )
-
-    assert result == InjectionResult(ok=True, action="inject_text")
+    assert result is worker
+    assert built["in_queue"] is in_queue
+    assert built["stop_event"] is stop_event
+    assert built["injector"] is injector
+    assert built["openclaw_command"] == app_config.injector.openclaw_command

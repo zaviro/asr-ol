@@ -1,0 +1,43 @@
+services:
+  funasr:
+    image: ${VOXKEEP_FUNASR_IMAGE:-registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-online-cpu-0.1.13}
+    container_name: ${VOXKEEP_FUNASR_CONTAINER:-voxkeep-funasr}
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "127.0.0.1:${VOXKEEP_ASR_EXTERNAL_PORT:-10096}:10095"
+    volumes:
+      - funasr-models:/workspace/models
+    command:
+      - /workspace/FunASR/runtime/websocket/build/bin/funasr-wss-server-2pass
+      - --download-model-dir
+      - /workspace/models
+      - --model-dir
+      - damo/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-onnx
+      - --online-model-dir
+      - damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online-onnx
+      - --vad-dir
+      - damo/speech_fsmn_vad_zh-cn-16k-common-onnx
+      - --punc-dir
+      - damo/punc_ct-transformer_zh-cn-common-vad_realtime-vocab272727-onnx
+      - --lm-dir
+      - damo/speech_ngram_lm_zh-cn-ai-wesp-fst
+      - --itn-dir
+      - thuduj12/fst_itn_zh
+      - --decoder-thread-num
+      - ${VOXKEEP_FUNASR_DECODER_THREADS:-4}
+      - --model-thread-num
+      - "1"
+      - --io-thread-num
+      - "1"
+      - --port
+      - "10095"
+      - --certfile
+      - ""
+      - --keyfile
+      - ""
+      - --hotword
+      - /workspace/FunASR/runtime/websocket/hotwords.txt
+
+volumes:
+  funasr-models:
