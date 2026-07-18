@@ -9,37 +9,36 @@ import queue
 import threading
 import time
 import uuid
-from typing import Any, cast
+from typing import Any
 
-from voxkeep.modules.transcription.application.backend_events import BackendTranscriptEvent
-from voxkeep.modules.transcription.contracts import TranscriptionBackendEvent
 from voxkeep.shared.config import AsrConfig
-from voxkeep.shared.events import ProcessedFrame
-from voxkeep.shared.interfaces import ASREngine
+from voxkeep.shared.events import AsrFinalEvent, ProcessedFrame
 from voxkeep.shared.queue_utils import put_nowait_or_drop
 
 logger = logging.getLogger(__name__)
 
 _FRAME_POLL_TIMEOUT_S = 0.1
+_FINAL_RESPONSE_TIMEOUT_S = 1.0
 
 
-class FunAsrWsEngine(ASREngine):
+class FunAsrWsEngine:
     """Stream microphone PCM to a FunASR WebSocket service."""
 
-    def __init__(self, cfg: AsrConfig, stop_event: threading.Event):
+    def __init__(self, cfg: AsrConfig):
         """Initialize bounded queues and lifecycle state."""
         self._cfg = cfg
-        self._stop_event = stop_event
+        self._stop_event = threading.Event()
         self._in_queue: queue.Queue[ProcessedFrame] = queue.Queue(maxsize=cfg.max_queue_size)
-        self._final_queue: queue.Queue[BackendTranscriptEvent] = queue.Queue(
-            maxsize=cfg.max_queue_size
-        )
+        self._final_queue: queue.Queue[AsrFinalEvent] = queue.Queue(maxsize=cfg.max_queue_size)
         self._thread: threading.Thread | None = None
+        self._span_lock = threading.Lock()
+        self._segment_start_ts: float | None = None
+        self._segment_end_ts: float | None = None
 
     @property
-    def final_queue(self) -> queue.Queue[TranscriptionBackendEvent]:
+    def final_queue(self) -> queue.Queue[AsrFinalEvent]:
         """Return the queue receiving finalized transcript events."""
-        return cast(queue.Queue[TranscriptionBackendEvent], self._final_queue)
+        return self._final_queue
 
     def start(self) -> None:
         """Start the background WebSocket worker once."""
@@ -58,7 +57,8 @@ class FunAsrWsEngine(ASREngine):
         )
 
     def close(self) -> None:
-        """Log a close request; shutdown is driven by the shared stop event."""
+        """Request a drain followed by WebSocket finalization."""
+        self._stop_event.set()
         logger.info("funasr websocket close requested")
 
     def join(self, timeout: float | None = None) -> None:
@@ -71,7 +71,7 @@ class FunAsrWsEngine(ASREngine):
 
     async def _run(self) -> None:
         backoff = self._cfg.reconnect_initial_s
-        while not self._stop_event.is_set():
+        while not self._stop_event.is_set() or not self._in_queue.empty():
             try:
                 await self._run_session()
                 backoff = self._cfg.reconnect_initial_s
@@ -105,18 +105,25 @@ class FunAsrWsEngine(ASREngine):
             logger.info("funasr websocket connected endpoint=%s", self._cfg.ws_url)
             sender = asyncio.create_task(self._sender(ws))
             receiver = asyncio.create_task(self._receiver(ws))
-            stopper = asyncio.create_task(asyncio.to_thread(self._stop_event.wait))
+            try:
+                done, _ = await asyncio.wait(
+                    {sender, receiver}, return_when=asyncio.FIRST_COMPLETED
+                )
 
-            done, pending = await asyncio.wait(
-                {sender, receiver, stopper},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            for task in pending:
-                task.cancel()
-            for task in done:
-                exc = task.exception()
-                if exc is not None:
-                    raise exc
+                if receiver in done and sender not in done:
+                    await receiver
+                    return
+
+                await sender
+                try:
+                    await asyncio.wait_for(receiver, timeout=_FINAL_RESPONSE_TIMEOUT_S)
+                except TimeoutError:
+                    logger.warning("funasr final response timed out during shutdown")
+            finally:
+                for task in (sender, receiver):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(sender, receiver, return_exceptions=True)
 
     async def _sender(self, ws: Any) -> None:
         await ws.send(json.dumps(self._session_config()))
@@ -126,6 +133,7 @@ class FunAsrWsEngine(ASREngine):
             frame = await asyncio.to_thread(self._get_frame, _FRAME_POLL_TIMEOUT_S)
             if frame is None:
                 continue
+            self._remember_frame(frame)
             pending_pcm.extend(frame.data_int16)
             while len(pending_pcm) >= target_bytes:
                 await ws.send(bytes(pending_pcm[:target_bytes]))
@@ -136,8 +144,6 @@ class FunAsrWsEngine(ASREngine):
 
     async def _receiver(self, ws: Any) -> None:
         async for raw in ws:
-            if self._stop_event.is_set():
-                return
             payload = self._parse_message(raw)
             if payload is None or not self._is_final(payload):
                 continue
@@ -146,13 +152,22 @@ class FunAsrWsEngine(ASREngine):
             if not text:
                 continue
 
-            now = time.time()
-            event = BackendTranscriptEvent(
+            fallback_start, fallback_end = self._take_segment_span()
+            event = AsrFinalEvent(
                 segment_id=str(payload.get("segment_id") or payload.get("sid") or uuid.uuid4()),
                 text=text,
-                start_ts=float(payload.get("start") or payload.get("start_time") or now),
-                end_ts=float(payload.get("end") or payload.get("end_time") or now),
-                event_type="final",
+                start_ts=_payload_timestamp(
+                    payload,
+                    "start",
+                    "start_time",
+                    fallback=fallback_start,
+                ),
+                end_ts=_payload_timestamp(
+                    payload,
+                    "end",
+                    "end_time",
+                    fallback=fallback_end,
+                ),
             )
             put_nowait_or_drop(
                 self._final_queue,
@@ -186,6 +201,23 @@ class FunAsrWsEngine(ASREngine):
         except queue.Empty:
             return None
 
+    def _remember_frame(self, frame: ProcessedFrame) -> None:
+        """Track the audio span represented by the next final response."""
+        with self._span_lock:
+            if self._segment_start_ts is None:
+                self._segment_start_ts = frame.ts_start
+            self._segment_end_ts = frame.ts_end
+
+    def _take_segment_span(self) -> tuple[float, float]:
+        """Consume the best local timestamp span for one backend final."""
+        now = time.time()
+        with self._span_lock:
+            start = self._segment_start_ts
+            end = self._segment_end_ts
+            self._segment_start_ts = None
+            self._segment_end_ts = None
+        return (start if start is not None else now, end if end is not None else now)
+
     @staticmethod
     def _parse_message(raw: Any) -> dict[str, Any] | None:
         if isinstance(raw, bytes) or not isinstance(raw, str):
@@ -208,6 +240,20 @@ class FunAsrWsEngine(ASREngine):
             or payload.get("sentence_end") is True
             or payload.get("type") == "final"
         )
+
+
+def _payload_timestamp(
+    payload: dict[str, Any],
+    primary: str,
+    alternate: str,
+    *,
+    fallback: float,
+) -> float:
+    """Read one timestamp without treating a valid zero as missing."""
+    raw = payload.get(primary)
+    if raw is None:
+        raw = payload.get(alternate)
+    return fallback if raw is None else float(raw)
 
 
 __all__ = ["FunAsrWsEngine"]

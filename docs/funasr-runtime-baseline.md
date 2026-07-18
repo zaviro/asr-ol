@@ -35,5 +35,5 @@ mono signed 16-bit PCM this is 960 samples, or 1920 bytes. VoxKeep therefore ref
 ## Compatibility Boundary
 
 Qwen/vLLM configuration, scripts, adapters, and tests are not part of the active runtime.
-Historical design documents may still mention previous ASR experiments, but runtime code and
-operator documentation must use this baseline.
+Runtime code and operator documentation must use this FunASR baseline; do not restore Qwen-specific
+configuration or fallback paths.

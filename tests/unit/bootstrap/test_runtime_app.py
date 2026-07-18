@@ -1,608 +1,334 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import threading
 
 import pytest
 
-from voxkeep.bootstrap.runtime_app import AppRuntime
+import voxkeep.bootstrap.runtime_app as runtime_app_module
+from voxkeep.bootstrap.runtime_app import (
+    AppRuntime,
+    PipelineQueues,
+    RuntimeComponents,
+    RuntimeSignals,
+    WorkerSpec,
+    build_runtime,
+)
 from voxkeep.shared.config import AppConfig
-from voxkeep.modules.capture.public import CaptureModule
-from voxkeep.modules.injection.public import InjectionModule
-from voxkeep.modules.storage.public import StorageModule
-from voxkeep.modules.transcription.public import TranscriptionModule
 
 
-class _CallRecorder:
-    def __init__(self, name: str, calls: list[str]) -> None:
-        self._name = name
-        self._calls = calls
-        self._alive = False
+class FakeWorker:
+    """Small structural fake for the lifecycle contract."""
+
+    def __init__(
+        self,
+        name: str,
+        calls: list[str],
+        *,
+        start_error: Exception | None = None,
+    ) -> None:
+        self.name = name
+        self.calls = calls
+        self.start_error = start_error
+        self.alive = False
 
     def start(self) -> None:
-        self._alive = True
-        self._calls.append(f"start:{self._name}")
+        self.calls.append(f"start:{self.name}")
+        if self.start_error is not None:
+            raise self.start_error
+        self.alive = True
 
     def join(self, timeout: float | None = None) -> None:
-        self._alive = False
-        self._calls.append(f"join:{self._name}:{timeout}")
+        self.calls.append(f"join:{self.name}:{timeout}")
+        self.alive = False
 
     def is_alive(self) -> bool:
-        return self._alive
+        return self.alive
 
 
-class _AudioSourceRecorder(_CallRecorder):
-    def stop(self) -> None:
-        self._calls.append(f"stop:{self._name}")
-
-
-class _AudioSourceFailure(_AudioSourceRecorder):
-    def start(self) -> None:
-        self._calls.append(f"start:{self._name}")
-        raise RuntimeError("boom")
-
-    def stop(self) -> None:
-        self._calls.append(f"stop:{self._name}")
-        raise RuntimeError("boom")
-
-
-class _FakeInjector:
-    def inject(self, text: str) -> bool:
-        _ = text
-        return True
-
-
-class _FakeWorker:
-    def start(self) -> None:
-        return
-
-    def join(self, timeout: float | None = None) -> None:
-        _ = timeout
-
-    def is_alive(self) -> bool:
-        return True
-
-
-class _FakeStorageModule(StorageModule):
-    def __init__(self) -> None:
-        self._in_queue = object()
+class FakeAudio(FakeWorker):
+    def __init__(
+        self,
+        calls: list[str],
+        stop_event: threading.Event,
+        *,
+        start_error: Exception | None = None,
+        raw_queue_size: int = 0,
+    ) -> None:
+        super().__init__("audio", calls, start_error=start_error)
+        self.stop_event = stop_event
+        self.queue_sizes = {"raw_queue": raw_queue_size}
+        self.stopped_after_signal = False
 
     def start(self) -> None:
-        return
+        try:
+            super().start()
+        except Exception:
+            # The real AudioEngine signals all workers when microphone startup fails.
+            self.stop_event.set()
+            raise
 
     def stop(self) -> None:
-        return
-
-    def join(self, timeout: float | None = None) -> None:
-        _ = timeout
-
-    def is_alive(self) -> bool:
-        return True
-
-    def store_transcript(self, event):  # type: ignore[no-untyped-def]
-        return event
-
-    def store_capture(self, event):  # type: ignore[no-untyped-def]
-        return event
+        self.stop_event.set()
+        self.stopped_after_signal = self.stop_event.is_set()
+        self.calls.append("stop:audio")
 
 
-class _FakeInjectionModule(InjectionModule):
-    def start(self) -> None:
-        return
-
-    def stop(self) -> None:
-        return
-
-    def join(self, timeout: float | None = None) -> None:
-        _ = timeout
-
-    def is_alive(self) -> bool:
-        return True
-
-    def execute_capture(self, event):  # type: ignore[no-untyped-def]
-        return event
-
-
-class _FakeCaptureModule(CaptureModule):
-    def __init__(self) -> None:
-        self._wake_queue = object()
-        self._vad_queue = object()
-        self._asr_queue = object()
-
-    def start(self) -> None:
-        return
-
-    def stop(self) -> None:
-        return
-
-    def accept_wake(self, event):  # type: ignore[no-untyped-def]
-        return
-
-    def accept_vad(self, event):  # type: ignore[no-untyped-def]
-        return
-
-    def accept_transcript(self, event):  # type: ignore[no-untyped-def]
-        return
-
-    def subscribe_capture_completed(self, handler):  # type: ignore[no-untyped-def]
-        _ = handler
-
-    def join(self, timeout: float | None = None) -> None:
-        _ = timeout
-
-    def is_alive(self) -> bool:
-        return True
-
-
-class _FakeTranscriptionModule(TranscriptionModule):
-    def __init__(self) -> None:
-        self._in_queue = object()
-        self._final_in_queue = object()
-        self._engine = type("FakeEngine", (), {"final_queue": object()})()
-
-    def start(self) -> None:
-        return
-
-    def stop(self) -> None:
-        return
-
-    def submit_audio(self, frame):  # type: ignore[no-untyped-def]
-        return
-
-    def subscribe_transcript_finalized(self, handler):  # type: ignore[no-untyped-def]
-        _ = handler
-
-    def join(self, timeout: float | None = None) -> None:
-        _ = timeout
-
-    def is_alive(self) -> bool:
-        return True
-
-
-@pytest.fixture(autouse=True)
-def _patch_runtime_ai_worker_builders(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_detection_workers",
-        lambda **_kwargs: (_FakeWorker(), _FakeWorker()),
-    )
-
-
-def test_runtime_builds_worker_lifecycle_plan(monkeypatch, app_config: AppConfig):
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_module",
-        lambda **_kwargs: _FakeCaptureModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module",
-        lambda **_kwargs: _FakeInjectionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_storage_module",
-        lambda **_kwargs: _FakeStorageModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        lambda **_kwargs: _FakeTranscriptionModule(),
-    )
-
-    runtime = AppRuntime(app_config)
-
-    startup_names = [item.name for item in runtime._startup_workers]
-    shutdown_names = [item.name for item in runtime._shutdown_workers]
-
-    assert startup_names == [
-        "storage_worker",
-        "capture_worker",
-        "injector_worker",
-        "wake_worker",
-        "vad_worker",
-        "asr_worker",
-        "audio_bus",
-    ]
-    assert shutdown_names == [
-        "audio_bus",
-        "wake_worker",
-        "vad_worker",
-        "asr_worker",
-        "capture_worker",
-        "injector_worker",
-        "storage_worker",
-    ]
-
-
-def test_runtime_builds_runtime_ai_workers_through_builder_functions(
-    monkeypatch,
-    app_config: AppConfig,
-):
-    fake_wake_worker = _FakeWorker()
-    fake_vad_worker = _FakeWorker()
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_module",
-        lambda **_kwargs: _FakeCaptureModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module",
-        lambda **_kwargs: _FakeInjectionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_storage_module",
-        lambda **_kwargs: _FakeStorageModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        lambda **_kwargs: _FakeTranscriptionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_detection_workers",
-        lambda **_kwargs: (fake_wake_worker, fake_vad_worker),
-        raising=False,
-    )
-
-    runtime = AppRuntime(app_config)
-
-    assert runtime.wake_worker is fake_wake_worker
-    assert runtime.vad_worker is fake_vad_worker
-
-
-def test_runtime_does_not_expose_transcription_private_engine(monkeypatch, app_config: AppConfig):
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_module",
-        lambda **_kwargs: _FakeCaptureModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module",
-        lambda **_kwargs: _FakeInjectionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_storage_module",
-        lambda **_kwargs: _FakeStorageModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        lambda **_kwargs: _FakeTranscriptionModule(),
-    )
-
-    runtime = AppRuntime(app_config)
-
-    assert not hasattr(runtime, "asr_engine")
-
-
-def test_runtime_start_and_stop_call_components_in_order():
+def _runtime_fixture(
+    *,
+    audio_start_error: Exception | None = None,
+    raw_queue_size: int = 0,
+) -> tuple[AppRuntime, dict[str, FakeWorker], list[str]]:
     calls: list[str] = []
-    runtime = AppRuntime.__new__(AppRuntime)
-    runtime.stop_event = threading.Event()
-    runtime.storage_worker = _CallRecorder("storage_worker", calls)
-    runtime.capture_worker = _CallRecorder("capture_worker", calls)
-    runtime.injector_worker = _CallRecorder("injector_worker", calls)
-    runtime.wake_worker = _CallRecorder("wake_worker", calls)
-    runtime.vad_worker = _CallRecorder("vad_worker", calls)
-    runtime.asr_worker = _CallRecorder("asr_worker", calls)
-    runtime.audio_bus = _CallRecorder("audio_bus", calls)
-    runtime.audio_source = _AudioSourceRecorder("audio_source", calls)
+    signals = RuntimeSignals.create()
+    workers: dict[str, FakeWorker] = {
+        name: FakeWorker(name, calls)
+        for name in ("storage", "capture", "injection", "wake", "vad", "transcription")
+    }
+    audio = FakeAudio(
+        calls,
+        signals.audio,
+        start_error=audio_start_error,
+        raw_queue_size=raw_queue_size,
+    )
+    workers["audio"] = audio
+    components = RuntimeComponents(
+        audio=audio,  # type: ignore[arg-type]
+        storage=workers["storage"],
+        capture=workers["capture"],
+        injection=workers["injection"],
+        wake=workers["wake"],
+        vad=workers["vad"],
+        transcription=workers["transcription"],
+    )
+    runtime = AppRuntime(
+        signals=signals,
+        queues=PipelineQueues.create(maxsize=4),
+        components=components,
+    )
+    return runtime, workers, calls
 
-    runtime._startup_workers = (
-        runtime._worker_handle("storage_worker", runtime.storage_worker, 2),
-        runtime._worker_handle("capture_worker", runtime.capture_worker, 2),
-        runtime._worker_handle("injector_worker", runtime.injector_worker, 2),
-        runtime._worker_handle("wake_worker", runtime.wake_worker, 2),
-        runtime._worker_handle("vad_worker", runtime.vad_worker, 2),
-        runtime._worker_handle("asr_worker", runtime.asr_worker, 3),
-        runtime._worker_handle("audio_bus", runtime.audio_bus, 2),
+
+def test_pipeline_queues_are_distinct_and_bounded() -> None:
+    queues = PipelineQueues.create(maxsize=7)
+    all_queues = (
+        queues.wake_audio,
+        queues.vad_audio,
+        queues.asr_audio,
+        queues.capture_events,
+        queues.capture_commands,
+        queues.storage_events,
     )
-    runtime._shutdown_workers = (
-        runtime._worker_handle("audio_bus", runtime.audio_bus, 2),
-        runtime._worker_handle("wake_worker", runtime.wake_worker, 2),
-        runtime._worker_handle("vad_worker", runtime.vad_worker, 2),
-        runtime._worker_handle("asr_worker", runtime.asr_worker, 3),
-        runtime._worker_handle("capture_worker", runtime.capture_worker, 2),
-        runtime._worker_handle("injector_worker", runtime.injector_worker, 2),
-        runtime._worker_handle("storage_worker", runtime.storage_worker, 2),
-    )
+
+    assert len({id(item) for item in all_queues}) == len(all_queues)
+    assert {item.maxsize for item in all_queues} == {7}
+    assert queues.sizes == {
+        "wake_audio_queue": 0,
+        "vad_audio_queue": 0,
+        "asr_audio_queue": 0,
+        "capture_event_queue": 0,
+        "capture_command_queue": 0,
+        "storage_queue": 0,
+    }
+
+
+def test_runtime_components_define_readable_lifecycle_plans() -> None:
+    runtime, _, _ = _runtime_fixture()
+
+    startup = runtime.components.startup
+    stages = runtime.components.downstream_shutdown(runtime._signals)
+    shutdown = [spec for stage in stages for spec in stage.workers]
+
+    assert all(isinstance(spec, WorkerSpec) for spec in (*startup, *shutdown))
+    assert [spec.name for spec in startup] == [
+        "storage",
+        "capture",
+        "injection",
+        "wake",
+        "vad",
+        "transcription",
+        "audio",
+    ]
+    assert [spec.name for spec in shutdown] == [
+        "wake",
+        "vad",
+        "transcription",
+        "capture",
+        "injection",
+        "storage",
+    ]
+    assert next(spec.join_timeout_s for spec in shutdown if spec.name == "transcription") == 3.0
+    assert [stage.signal for stage in stages] == [
+        runtime._signals.analysis,
+        runtime._signals.capture,
+        runtime._signals.outputs,
+    ]
+
+
+def test_runtime_starts_and_stops_components_once_in_dependency_order() -> None:
+    runtime, workers, calls = _runtime_fixture()
 
     runtime.start()
     runtime.stop()
+    runtime.stop()
 
-    assert runtime.stop_event.is_set() is True
+    assert runtime.stop_event.is_set()
+    assert all(
+        signal.is_set()
+        for signal in (
+            runtime._signals.audio,
+            runtime._signals.analysis,
+            runtime._signals.capture,
+            runtime._signals.outputs,
+        )
+    )
+    assert isinstance(workers["audio"], FakeAudio)
+    assert workers["audio"].stopped_after_signal
     assert calls == [
-        "start:storage_worker",
-        "start:capture_worker",
-        "start:injector_worker",
-        "start:wake_worker",
-        "start:vad_worker",
-        "start:asr_worker",
-        "start:audio_bus",
-        "start:audio_source",
-        "stop:audio_source",
-        "join:audio_bus:2",
-        "join:wake_worker:2",
-        "join:vad_worker:2",
-        "join:asr_worker:3",
-        "join:capture_worker:2",
-        "join:injector_worker:2",
-        "join:storage_worker:2",
+        "start:storage",
+        "start:capture",
+        "start:injection",
+        "start:wake",
+        "start:vad",
+        "start:transcription",
+        "start:audio",
+        "stop:audio",
+        "join:audio:2.0",
+        "join:wake:2.0",
+        "join:vad:2.0",
+        "join:transcription:3.0",
+        "join:capture:2.0",
+        "join:injection:2.0",
+        "join:storage:2.0",
     ]
 
 
-def test_runtime_stop_continues_when_audio_source_stop_fails():
-    calls: list[str] = []
-    runtime = AppRuntime.__new__(AppRuntime)
-    runtime.stop_event = threading.Event()
-    runtime.storage_worker = _CallRecorder("storage_worker", calls)
-    runtime.capture_worker = _CallRecorder("capture_worker", calls)
-    runtime.injector_worker = _CallRecorder("injector_worker", calls)
-    runtime.wake_worker = _CallRecorder("wake_worker", calls)
-    runtime.vad_worker = _CallRecorder("vad_worker", calls)
-    runtime.asr_worker = _CallRecorder("asr_worker", calls)
-    runtime.audio_bus = _CallRecorder("audio_bus", calls)
-    runtime.audio_source = _AudioSourceFailure("audio_source", calls)
-    runtime._shutdown_workers = (
-        runtime._worker_handle("audio_bus", runtime.audio_bus, 2),
-        runtime._worker_handle("wake_worker", runtime.wake_worker, 2),
-        runtime._worker_handle("vad_worker", runtime.vad_worker, 2),
-        runtime._worker_handle("asr_worker", runtime.asr_worker, 3),
-        runtime._worker_handle("capture_worker", runtime.capture_worker, 2),
-        runtime._worker_handle("injector_worker", runtime.injector_worker, 2),
-        runtime._worker_handle("storage_worker", runtime.storage_worker, 2),
-    )
+def test_runtime_propagates_audio_start_failure_and_signals_shutdown() -> None:
+    runtime, _, calls = _runtime_fixture(audio_start_error=RuntimeError("microphone unavailable"))
 
-    runtime.stop()
+    with pytest.raises(RuntimeError, match="microphone unavailable"):
+        runtime.start()
 
-    assert runtime.stop_event.is_set() is True
-    assert calls[0] == "stop:audio_source"
-    assert calls[-1] == "join:storage_worker:2"
+    assert runtime.stop_event.is_set()
+    assert calls == [
+        "start:storage",
+        "start:capture",
+        "start:injection",
+        "start:wake",
+        "start:vad",
+        "start:transcription",
+        "start:audio",
+        "stop:audio",
+        "join:audio:2.0",
+        "join:wake:2.0",
+        "join:vad:2.0",
+        "join:transcription:3.0",
+        "join:capture:2.0",
+        "join:injection:2.0",
+        "join:storage:2.0",
+    ]
 
 
-def test_runtime_init_wires_asr_and_capture_queues(monkeypatch, app_config: AppConfig):
-    fake_capture = _FakeCaptureModule()
-    fake_transcription = _FakeTranscriptionModule()
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_module", lambda **_kwargs: fake_capture
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module",
-        lambda **_kwargs: _FakeInjectionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        lambda **_kwargs: fake_transcription,
-    )
-    fake_storage = _FakeStorageModule()
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_storage_module", lambda **_kwargs: fake_storage
-    )
-    cfg = replace(
-        app_config,
-        audio_engine=replace(app_config.audio_engine, max_queue_size=8),
-    )
-
-    runtime = AppRuntime(cfg)
-
-    assert runtime.asr_worker is fake_transcription
-    assert runtime.capture_worker is fake_capture
-    assert runtime.storage_worker is fake_storage
-    assert runtime.raw_queue.maxsize == 8
-
-
-def test_runtime_builds_storage_through_module_public_api(monkeypatch, app_config: AppConfig):
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_module",
-        lambda **_kwargs: _FakeCaptureModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module",
-        lambda **_kwargs: _FakeInjectionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        lambda **_kwargs: _FakeTranscriptionModule(),
-    )
-    built: dict[str, object] = {}
-
-    def _build_storage_module(**kwargs):  # type: ignore[no-untyped-def]
-        built.update(kwargs)
-        return _FakeStorageModule()
-
-    monkeypatch.setattr("voxkeep.bootstrap.runtime_app.build_storage_module", _build_storage_module)
-
-    runtime = AppRuntime(app_config)
-
-    assert runtime.storage_worker is not None
-    assert built["in_queue"] is runtime.storage_queue
-    assert built["stop_event"] is runtime.stop_event
-    assert built["cfg"] is app_config.storage
-
-
-def test_runtime_builds_injection_through_module_public_api(monkeypatch, app_config: AppConfig):
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_module",
-        lambda **_kwargs: _FakeCaptureModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        lambda **_kwargs: _FakeTranscriptionModule(),
-    )
-    fake_storage = _FakeStorageModule()
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_storage_module", lambda **_kwargs: fake_storage
-    )
-    built: dict[str, object] = {}
-
-    def _build_injection_module(**kwargs):  # type: ignore[no-untyped-def]
-        built.update(kwargs)
-        return _FakeInjectionModule()
-
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module", _build_injection_module
-    )
-
-    runtime = AppRuntime(app_config)
-
-    assert runtime.injector_worker is not None
-    assert built["in_queue"] is runtime.capture_cmd_queue
-    assert built["stop_event"] is runtime.stop_event
-    assert built["cfg"] is app_config.injector
-
-
-def test_runtime_builds_capture_through_module_public_api(monkeypatch, app_config: AppConfig):
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        lambda **_kwargs: _FakeTranscriptionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module",
-        lambda **_kwargs: _FakeInjectionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_storage_module",
-        lambda **_kwargs: _FakeStorageModule(),
-    )
-    built: dict[str, object] = {}
-
-    def _build_capture_module(**kwargs):  # type: ignore[no-untyped-def]
-        built.update(kwargs)
-        return _FakeCaptureModule()
-
-    monkeypatch.setattr("voxkeep.bootstrap.runtime_app.build_capture_module", _build_capture_module)
-
-    runtime = AppRuntime(app_config)
-
-    assert runtime.capture_worker is not None
-    assert built["wake_queue"] is runtime.wake_event_queue
-    assert built["vad_queue"] is runtime.vad_event_queue
-    assert built["asr_queue"] is runtime.capture_asr_queue
-    assert built["downstream_queue"] is runtime.capture_cmd_queue
-    assert built["storage_queue"] is runtime.storage_queue
-    assert built["cfg"] is app_config.capture
-
-
-def test_runtime_builds_transcription_through_module_public_api(monkeypatch, app_config: AppConfig):
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_module",
-        lambda **_kwargs: _FakeCaptureModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module",
-        lambda **_kwargs: _FakeInjectionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_storage_module",
-        lambda **_kwargs: _FakeStorageModule(),
-    )
-    built: dict[str, object] = {}
-
-    def _build_transcription_module(**kwargs):  # type: ignore[no-untyped-def]
-        built.update(kwargs)
-        return _FakeTranscriptionModule()
-
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        _build_transcription_module,
-    )
-
-    runtime = AppRuntime(app_config)
-
-    assert runtime.asr_worker is not None
-    assert built["in_queue"] is runtime.asr_audio_queue
-    assert built["capture_queue"] is runtime.capture_asr_queue
-    assert built["storage_queue"] is runtime.storage_queue
-    assert built["stop_event"] is runtime.stop_event
-    assert built["asr_cfg"] is app_config.asr
-    assert built["storage_cfg"] is app_config.storage
-
-
-def test_runtime_builds_funasr_transcription_backend_through_public_api(
-    monkeypatch, app_config: AppConfig
-) -> None:
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_capture_module",
-        lambda **_kwargs: _FakeCaptureModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_injection_module",
-        lambda **_kwargs: _FakeInjectionModule(),
-    )
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_storage_module",
-        lambda **_kwargs: _FakeStorageModule(),
-    )
-    built: dict[str, object] = {}
-    funasr_cfg = replace(app_config, asr=replace(app_config.asr, backend="funasr_ws"))
-
-    def _build_transcription_module(**kwargs):  # type: ignore[no-untyped-def]
-        built.update(kwargs)
-        return _FakeTranscriptionModule()
-
-    monkeypatch.setattr(
-        "voxkeep.bootstrap.runtime_app.build_transcription_module",
-        _build_transcription_module,
-    )
-
-    runtime = AppRuntime(funasr_cfg)
-
-    assert runtime.asr_worker is not None
-    assert built["asr_cfg"] is funasr_cfg.asr
-    assert built["asr_cfg"].backend == "funasr_ws"
-
-
-def test_run_forever_raises_when_worker_is_unhealthy():
-    calls: list[str] = []
-    runtime = AppRuntime.__new__(AppRuntime)
-    runtime.stop_event = threading.Event()
-    runtime._fatal_error = None
-    worker = _CallRecorder("asr_worker", calls)
-    runtime._startup_workers = (runtime._worker_handle("asr_worker", worker, 1),)
+def test_run_forever_reports_every_dead_worker() -> None:
+    runtime, workers, _ = _runtime_fixture()
+    runtime.start()
+    workers["wake"].alive = False
+    workers["transcription"].alive = False
 
     runtime.run_forever()
 
-    assert runtime.stop_event.is_set() is True
-    assert runtime.fatal_error == "worker stopped unexpectedly: asr_worker"
+    assert runtime.stop_event.is_set()
+    assert runtime.fatal_error == "worker stopped unexpectedly: wake, transcription"
 
 
-def test_find_unhealthy_workers_returns_all_dead_workers():
-    runtime = AppRuntime.__new__(AppRuntime)
-    runtime._startup_workers = (
-        runtime._worker_handle("wake_worker", _CallRecorder("wake_worker", []), 1),
-        runtime._worker_handle("vad_worker", _CallRecorder("vad_worker", []), 1),
-    )
-
-    assert runtime._find_unhealthy_workers() == ("wake_worker", "vad_worker")
-
-
-def test_run_forever_exits_cleanly_when_stop_event_already_set():
-    runtime = AppRuntime.__new__(AppRuntime)
-    runtime.stop_event = threading.Event()
+def test_run_forever_exits_cleanly_after_external_shutdown() -> None:
+    runtime, _, _ = _runtime_fixture()
     runtime.stop_event.set()
-    runtime._fatal_error = None
-    runtime._startup_workers = ()
 
     runtime.run_forever()
 
     assert runtime.fatal_error is None
 
 
-def test_start_propagates_audio_source_start_failure():
+def test_runtime_queue_sizes_combine_audio_and_pipeline_queues() -> None:
+    runtime, _, _ = _runtime_fixture(raw_queue_size=3)
+    runtime.queues.wake_audio.put(object())  # type: ignore[arg-type]
+    runtime.queues.capture_commands.put(object())  # type: ignore[arg-type]
+
+    assert runtime.queue_sizes == {
+        "raw_queue": 3,
+        "wake_audio_queue": 1,
+        "vad_audio_queue": 0,
+        "asr_audio_queue": 0,
+        "capture_event_queue": 0,
+        "capture_command_queue": 1,
+        "storage_queue": 0,
+    }
+
+
+def test_build_runtime_connects_each_consumer_to_the_audio_fanout(
+    monkeypatch: pytest.MonkeyPatch,
+    app_config: AppConfig,
+) -> None:
     calls: list[str] = []
-    runtime = AppRuntime.__new__(AppRuntime)
-    runtime.stop_event = threading.Event()
-    runtime.storage_worker = _CallRecorder("storage_worker", calls)
-    runtime.capture_worker = _CallRecorder("capture_worker", calls)
-    runtime.injector_worker = _CallRecorder("injector_worker", calls)
-    runtime.wake_worker = _CallRecorder("wake_worker", calls)
-    runtime.vad_worker = _CallRecorder("vad_worker", calls)
-    runtime.asr_worker = _CallRecorder("asr_worker", calls)
-    runtime.audio_bus = _CallRecorder("audio_bus", calls)
-    runtime.audio_source = _AudioSourceFailure("audio_source", calls)
-    runtime._startup_workers = (
-        runtime._worker_handle("storage_worker", runtime.storage_worker, 2),
-        runtime._worker_handle("capture_worker", runtime.capture_worker, 2),
-        runtime._worker_handle("injector_worker", runtime.injector_worker, 2),
-        runtime._worker_handle("wake_worker", runtime.wake_worker, 2),
-        runtime._worker_handle("vad_worker", runtime.vad_worker, 2),
-        runtime._worker_handle("asr_worker", runtime.asr_worker, 3),
-        runtime._worker_handle("audio_bus", runtime.audio_bus, 2),
+    built: dict[str, dict[str, object]] = {}
+    workers = {
+        name: FakeWorker(name, calls)
+        for name in ("storage", "capture", "injection", "wake", "vad", "transcription")
+    }
+    audio: FakeAudio | None = None
+
+    def build_audio(**kwargs: object) -> FakeAudio:
+        nonlocal audio
+        built["audio"] = kwargs
+        audio = FakeAudio(calls, kwargs["stop_event"])  # type: ignore[arg-type]
+        return audio
+
+    def build_detectors(**kwargs: object) -> tuple[FakeWorker, FakeWorker]:
+        built["detectors"] = kwargs
+        return workers["wake"], workers["vad"]
+
+    def worker_builder(name: str):  # type: ignore[no-untyped-def]
+        def build(**kwargs: object) -> FakeWorker:
+            built[name] = kwargs
+            return workers[name]
+
+        return build
+
+    monkeypatch.setattr(runtime_app_module, "build_audio_engine", build_audio)
+    monkeypatch.setattr(runtime_app_module, "build_capture_detection_workers", build_detectors)
+    monkeypatch.setattr(runtime_app_module, "build_capture_module", worker_builder("capture"))
+    monkeypatch.setattr(runtime_app_module, "build_injection_module", worker_builder("injection"))
+    monkeypatch.setattr(runtime_app_module, "build_storage_module", worker_builder("storage"))
+    monkeypatch.setattr(
+        runtime_app_module,
+        "build_transcription_module",
+        worker_builder("transcription"),
     )
 
-    with pytest.raises(RuntimeError, match="boom"):
-        runtime.start()
+    runtime = build_runtime(app_config)
 
-    assert calls[-1] == "start:audio_source"
+    wake_audio = built["audio"]["wake_queue"]
+    vad_audio = built["audio"]["vad_queue"]
+    assert wake_audio is runtime.queues.wake_audio
+    assert vad_audio is runtime.queues.vad_audio
+    assert wake_audio is not vad_audio
+    assert built["detectors"]["wake_in_queue"] is wake_audio
+    assert built["detectors"]["vad_in_queue"] is vad_audio
+    assert built["audio"]["asr_queue"] is built["transcription"]["audio_queue"]
+
+    capture_events = runtime.queues.capture_events
+    assert built["detectors"]["event_queue"] is capture_events
+    assert built["transcription"]["capture_queue"] is capture_events
+    assert built["capture"]["event_queue"] is capture_events
+    assert built["capture"]["command_queue"] is built["injection"]["in_queue"]
+    assert built["capture"]["storage_queue"] is built["storage"]["in_queue"]
+    assert built["transcription"]["storage_queue"] is built["storage"]["in_queue"]
+
+    assert built["audio"]["stop_event"] is not runtime.stop_event
+    assert built["detectors"]["stop_event"] is built["transcription"]["stop_event"]
+    assert built["capture"]["stop_event"] is not built["transcription"]["stop_event"]
+    assert built["injection"]["stop_event"] is built["storage"]["stop_event"]
+
+    assert runtime.components.audio is audio
+    assert runtime.components.wake is workers["wake"]
+    assert runtime.components.vad is workers["vad"]

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from voxkeep.shared.asr_backends import resolve_backend_definition
-
 
 @dataclass(slots=True, frozen=True)
 class WakeRuleConfig:
@@ -63,13 +61,11 @@ class AsrConfig:
 class CaptureConfig:
     """Audio capture and VAD/Wake specific configuration."""
 
-    wake_threshold: float
     wake_rules: tuple[WakeRuleConfig, ...]
     vad_speech_threshold: float
     vad_silence_ms: int
     pre_roll_ms: int
     armed_timeout_ms: int
-    max_queue_size: int
 
     @property
     def enabled_wake_rules(self) -> tuple[WakeRuleConfig, ...]:
@@ -82,9 +78,7 @@ class StorageConfig:
     """Storage specific configuration."""
 
     sqlite_path: str
-    store_final_only: bool
     jsonl_debug_path: str | None
-    max_queue_size: int
 
 
 @dataclass(slots=True, frozen=True)
@@ -96,7 +90,6 @@ class InjectorConfig:
     xdotool_delay_ms: int
     openclaw_command: tuple[str, ...]
     openclaw_timeout_s: float
-    max_queue_size: int
 
 
 @dataclass(slots=True, frozen=True)
@@ -123,7 +116,8 @@ class AppConfig:
         _require_positive_float("asr.reconnect_max_s", self.asr.reconnect_max_s)
 
         backend = self.asr.backend.strip().lower()
-        resolve_backend_definition(backend)
+        if backend != "funasr_ws":
+            raise ValueError(f"unsupported asr backend: {self.asr.backend}")
 
         if self.asr.reconnect_max_s < self.asr.reconnect_initial_s:
             raise ValueError("asr.reconnect_max_s must be >= asr.reconnect_initial_s")
@@ -149,16 +143,11 @@ class AppConfig:
         )
 
         # Capture validation
-        _require_probability("capture.wake_threshold", self.capture.wake_threshold)
         _require_probability("capture.vad_speech_threshold", self.capture.vad_speech_threshold)
         _require_non_negative_int("capture.pre_roll_ms", self.capture.pre_roll_ms)
         _require_positive_int("capture.armed_timeout_ms", self.capture.armed_timeout_ms)
         _require_positive_int("capture.vad_silence_ms", self.capture.vad_silence_ms)
-        _require_positive_int("capture.max_queue_size", self.capture.max_queue_size)
         _validate_wake_rules(self.capture.wake_rules)
-
-        # Storage validation
-        _require_positive_int("storage.max_queue_size", self.storage.max_queue_size)
 
         # Injector validation
         injector_backend = self.injector.backend.strip().lower()
@@ -166,7 +155,6 @@ class AppConfig:
             raise ValueError("injector.backend must be one of: auto, xdotool, ydotool")
         _require_non_negative_int("injector.xdotool_delay_ms", self.injector.xdotool_delay_ms)
         _require_positive_float("injector.openclaw_timeout_s", self.injector.openclaw_timeout_s)
-        _require_positive_int("injector.max_queue_size", self.injector.max_queue_size)
 
         if not self.injector.openclaw_command:
             raise ValueError("injector.openclaw_command must not be empty")

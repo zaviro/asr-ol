@@ -42,7 +42,6 @@ def app_config() -> AppConfig:
         sample_rate=16000,
     )
     capture = CaptureConfig(
-        wake_threshold=0.5,
         wake_rules=(
             WakeRuleConfig(
                 keyword="alexa",
@@ -61,13 +60,10 @@ def app_config() -> AppConfig:
         vad_silence_ms=800,
         pre_roll_ms=600,
         armed_timeout_ms=5000,
-        max_queue_size=16,
     )
     storage = StorageConfig(
         sqlite_path=":memory:",
-        store_final_only=True,
         jsonl_debug_path=None,
-        max_queue_size=16,
     )
     injector = InjectorConfig(
         backend="auto",
@@ -75,7 +71,6 @@ def app_config() -> AppConfig:
         xdotool_delay_ms=1,
         openclaw_command=("openclaw", "agent", "--message", "{text}"),
         openclaw_timeout_s=20.0,
-        max_queue_size=16,
     )
     return AppConfig(
         audio_engine=audio_engine,

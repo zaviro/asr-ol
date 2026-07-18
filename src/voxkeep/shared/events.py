@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeAlias
 
 import numpy as np
 
@@ -61,7 +61,9 @@ class AsrFinalEvent:
     text: str
     start_ts: float
     end_ts: float
-    is_final: bool = True
+
+
+CaptureEvent: TypeAlias = WakeEvent | VadEvent | AsrFinalEvent
 
 
 @dataclass(slots=True, frozen=True)
@@ -74,16 +76,3 @@ class CaptureCommand:
     text: str
     start_ts: float
     end_ts: float
-
-
-@dataclass(slots=True, frozen=True)
-class StorageRecord:
-    """Persistable transcript or capture record."""
-
-    source: str
-    text: str
-    start_ts: float
-    end_ts: float
-    is_final: bool
-    created_at: str
-    meta_json: str | None = None

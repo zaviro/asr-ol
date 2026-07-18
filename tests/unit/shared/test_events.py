@@ -7,7 +7,6 @@ from voxkeep.shared.events import (
     CaptureCommand,
     ProcessedFrame,
     RawAudioChunk,
-    StorageRecord,
     VadEvent,
     WakeEvent,
 )
@@ -69,7 +68,7 @@ def test_vad_event_speech_end() -> None:
     assert event.score == 0.3
 
 
-def test_asr_final_event_defaults_to_final() -> None:
+def test_asr_final_event_fields() -> None:
     event = AsrFinalEvent(
         segment_id="seg-1",
         text="hello world",
@@ -77,19 +76,8 @@ def test_asr_final_event_defaults_to_final() -> None:
         end_ts=2.0,
     )
 
-    assert event.is_final is True
-
-
-def test_asr_final_event_can_be_non_final() -> None:
-    event = AsrFinalEvent(
-        segment_id="seg-1",
-        text="hello",
-        start_ts=1.0,
-        end_ts=1.5,
-        is_final=False,
-    )
-
-    assert event.is_final is False
+    assert event.segment_id == "seg-1"
+    assert event.text == "hello world"
 
 
 def test_capture_command_slots() -> None:
@@ -106,31 +94,3 @@ def test_capture_command_slots() -> None:
     assert cmd.keyword == "alexa"
     assert cmd.action == "inject_text"
     assert cmd.text == "turn on the lights"
-
-
-def test_storage_record_with_meta() -> None:
-    record = StorageRecord(
-        source="asr",
-        text="test transcription",
-        start_ts=1.0,
-        end_ts=2.0,
-        is_final=True,
-        created_at="2024-01-01T00:00:00",
-        meta_json='{"confidence": 0.95}',
-    )
-
-    assert record.source == "asr"
-    assert record.meta_json == '{"confidence": 0.95}'
-
-
-def test_storage_record_without_meta() -> None:
-    record = StorageRecord(
-        source="capture",
-        text="short command",
-        start_ts=1.0,
-        end_ts=1.5,
-        is_final=True,
-        created_at="2024-01-01T00:00:00",
-    )
-
-    assert record.meta_json is None

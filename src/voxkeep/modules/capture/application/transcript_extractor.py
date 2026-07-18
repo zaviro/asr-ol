@@ -29,8 +29,7 @@ class InMemoryTranscriptExtractor:
 
     def on_asr_final(self, event: AsrFinalEvent) -> None:
         """Store finalized transcript segments."""
-        if event.is_final:
-            self._asr_finals.append(event)
+        self._asr_finals.append(event)
 
     def extract(self, start_ts: float, end_ts: float) -> str:
         """Return concatenated text for overlapping finalized segments."""

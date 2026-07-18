@@ -2,34 +2,17 @@ from __future__ import annotations
 
 import threading
 
-import pytest
 from websockets.sync.server import serve
 
 from voxkeep.shared.asr_health import AsrHealthStatus
 from voxkeep.shared.asr_health import classify_backend_health
-from voxkeep.shared.asr_health import classify_health_result
 from voxkeep.shared.asr_health import probe_websocket_handshake
-
-
-def test_classify_health_result_prefers_handshake_failure_over_tcp_success() -> None:
-    status = classify_health_result(
-        tcp_ok=True,
-        handshake_ok=False,
-        detail="bad handshake",
-    )
-
-    assert status == AsrHealthStatus(
-        state="degraded",
-        reason="handshake_failed",
-        detail="bad handshake",
-    )
 
 
 def test_classify_backend_health_marks_tcp_only_probe_as_starting() -> None:
     status = classify_backend_health(
         tcp_ok=True,
         handshake_ok=None,
-        assets_status="ok",
         detail="tcp reachable only",
     )
 
@@ -37,36 +20,6 @@ def test_classify_backend_health_marks_tcp_only_probe_as_starting() -> None:
         state="starting",
         reason="tcp_only_probe",
         detail="tcp reachable only",
-    )
-
-
-def test_classify_backend_health_reports_missing_assets_explicitly() -> None:
-    status = classify_backend_health(
-        tcp_ok=True,
-        handshake_ok=None,
-        assets_status="missing",
-        detail="managed backend assets missing",
-    )
-
-    assert status == AsrHealthStatus(
-        state="unavailable",
-        reason="assets_missing",
-        detail="managed backend assets missing",
-    )
-
-
-def test_classify_backend_health_reports_invalid_assets_explicitly() -> None:
-    status = classify_backend_health(
-        tcp_ok=True,
-        handshake_ok=None,
-        assets_status="invalid",
-        detail="malformed installed.json",
-    )
-
-    assert status == AsrHealthStatus(
-        state="unavailable",
-        reason="assets_invalid",
-        detail="malformed installed.json",
     )
 
 
@@ -97,59 +50,10 @@ def test_probe_websocket_handshake_fails_for_closed_port() -> None:
     assert detail
 
 
-def test_normalize_health_state_handles_aliases() -> None:
-    from voxkeep.shared.asr_health import normalize_health_state
-
-    assert normalize_health_state("ok") == "healthy"
-    assert normalize_health_state("ready") == "healthy"
-    assert normalize_health_state("booting") == "starting"
-    assert normalize_health_state("warning") == "degraded"
-    assert normalize_health_state("down") == "unavailable"
-
-
-def test_normalize_health_state_strips_whitespace() -> None:
-    from voxkeep.shared.asr_health import normalize_health_state
-
-    assert normalize_health_state("  healthy  ") == "healthy"
-
-
-def test_normalize_health_state_raises_for_unknown_state() -> None:
-    from voxkeep.shared.asr_health import normalize_health_state
-
-    with pytest.raises(ValueError, match="unsupported health state"):
-        normalize_health_state("unknown_state")
-
-
-def test_normalize_asset_status_handles_aliases() -> None:
-    from voxkeep.shared.asr_health import normalize_asset_status
-
-    assert normalize_asset_status("present") == "ok"
-    assert normalize_asset_status("installed") == "ok"
-    assert normalize_asset_status("absent") == "missing"
-    assert normalize_asset_status("malformed") == "invalid"
-    assert normalize_asset_status("corrupt") == "invalid"
-
-
-def test_normalize_asset_status_strips_whitespace() -> None:
-    from voxkeep.shared.asr_health import normalize_asset_status
-
-    assert normalize_asset_status("  ok  ") == "ok"
-
-
-def test_normalize_asset_status_raises_for_unknown_status() -> None:
-    from voxkeep.shared.asr_health import normalize_asset_status
-
-    with pytest.raises(ValueError, match="unsupported asset status"):
-        normalize_asset_status("unknown_status")
-
-
 def test_classify_backend_health_tcp_unreachable_returns_unavailable() -> None:
-    from voxkeep.shared.asr_health import classify_backend_health
-
     status = classify_backend_health(
         tcp_ok=False,
         handshake_ok=None,
-        assets_status="ok",
         detail="connection refused",
     )
 
@@ -158,28 +62,11 @@ def test_classify_backend_health_tcp_unreachable_returns_unavailable() -> None:
 
 
 def test_classify_backend_health_handshake_ok_returns_healthy() -> None:
-    from voxkeep.shared.asr_health import classify_backend_health
-
     status = classify_backend_health(
         tcp_ok=True,
         handshake_ok=True,
-        assets_status="ok",
         detail="all good",
     )
 
     assert status.state == "healthy"
     assert status.reason == "ok"
-
-
-def test_classify_backend_health_missing_assets_takes_precedence() -> None:
-    from voxkeep.shared.asr_health import classify_backend_health
-
-    status = classify_backend_health(
-        tcp_ok=True,
-        handshake_ok=True,
-        assets_status="missing",
-        detail="assets gone",
-    )
-
-    assert status.state == "unavailable"
-    assert status.reason == "assets_missing"

@@ -19,7 +19,6 @@ def test_load_config_from_yaml_and_env(tmp_path, monkeypatch):
         "    host: 127.0.0.1\n"
         "    port: 10096\n"
         "wake:\n"
-        "  threshold: 0.4\n"
         "  rules:\n"
         "    - keyword: alexa\n"
         "      enabled: true\n"
@@ -96,6 +95,21 @@ def test_load_config_supports_funasr_backend_and_runtime_reconnect_settings(tmp_
     assert cfg.asr.external_path == "/"
     assert cfg.asr.reconnect_initial_s == 2.5
     assert cfg.asr.reconnect_max_s == 9.0
+
+
+def test_load_config_normalizes_supported_backend_id(tmp_path) -> None:
+    cfg_file = tmp_path / "backend.yaml"
+    cfg_file.write_text("asr:\n  backend: ' FUNASR_WS '\n", encoding="utf-8")
+
+    assert load_config(cfg_file).asr.backend == "funasr_ws"
+
+
+def test_load_config_rejects_unsupported_backend(tmp_path) -> None:
+    cfg_file = tmp_path / "backend.yaml"
+    cfg_file.write_text("asr:\n  backend: qwen\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsupported asr backend: qwen"):
+        load_config(cfg_file)
 
 
 def test_load_config_supports_funasr_protocol_settings(tmp_path) -> None:
@@ -216,7 +230,73 @@ def test_load_config_raises_when_wake_rule_item_is_not_mapping(tmp_path) -> None
     cfg_file = tmp_path / "bad_rules.yaml"
     cfg_file.write_text("wake:\n  rules:\n    - alexa\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="wake.rules items must be mappings"):
+    with pytest.raises(ValueError, match=r"config key must be a mapping: wake\.rules\[0\]"):
+        load_config(cfg_file)
+
+
+@pytest.mark.parametrize(
+    ("yaml_text", "unknown_key"),
+    [
+        ("unexpected: true\n", "unexpected"),
+        ("asr:\n  external:\n    hostname: localhost\n", "asr.external.hostname"),
+        ("wake:\n  threshold: 0.4\n", "wake.threshold"),
+        ("storage:\n  store_final_only: true\n", "storage.store_final_only"),
+        (
+            "wake:\n  rules:\n    - keyword: alexa\n      threshhold: 0.4\n",
+            "wake.rules[0].threshhold",
+        ),
+    ],
+)
+def test_load_config_rejects_unknown_yaml_keys(
+    tmp_path,
+    yaml_text: str,
+    unknown_key: str,
+) -> None:
+    cfg_file = tmp_path / "unknown.yaml"
+    cfg_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc_info:
+        load_config(cfg_file)
+    assert str(exc_info.value) == f"unknown config key: {unknown_key}"
+
+
+@pytest.mark.parametrize(
+    ("yaml_text", "message"),
+    [
+        ("wake: false\n", "config key must be a mapping: wake"),
+        ("wake:\n  rules: false\n", "config key must be a list: wake.rules"),
+    ],
+)
+def test_load_config_reports_invalid_container_types(
+    tmp_path,
+    yaml_text: str,
+    message: str,
+) -> None:
+    cfg_file = tmp_path / "invalid-shape.yaml"
+    cfg_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        load_config(cfg_file)
+
+
+@pytest.mark.parametrize(
+    ("env_name", "value"),
+    [
+        ("VOXKEEP_ASR_EXTERNAL_PORT", "not-a-port"),
+        ("VOXKEEP_INJECTOR_AUTO_ENTER", "maybe"),
+    ],
+)
+def test_load_config_reports_invalid_environment_values(
+    tmp_path,
+    monkeypatch,
+    env_name: str,
+    value: str,
+) -> None:
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setenv(env_name, value)
+
+    with pytest.raises(ValueError, match=f"invalid value for {env_name}"):
         load_config(cfg_file)
 
 

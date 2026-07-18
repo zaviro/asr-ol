@@ -109,7 +109,7 @@ jobs:
         id: changes
         run: |
           if git diff --name-only origin/main...HEAD 2>/dev/null |
-             grep -qE '^(src/voxkeep/infra/(wake|vad|audio)/|scripts/(setup_openwakeword|check_runtime_ai)|pyproject\.toml|\.github/workflows/ci\.yml)'; then
+             grep -qE '^(src/voxkeep/modules/(audio_engine|capture)/|scripts/(setup_openwakeword|check_runtime_ai)|pyproject\.toml|\.github/workflows/ci\.yml)'; then
             echo "ai=true" >> "$GITHUB_OUTPUT"
           else
             echo "ai=false" >> "$GITHUB_OUTPUT"

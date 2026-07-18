@@ -22,7 +22,6 @@ asr:
     itn: true
 
 wake:
-  threshold: 0.5
   rules:
     - keyword: alexa
       enabled: true
@@ -59,7 +58,6 @@ capture:
 
 storage:
   sqlite_path: data/asr.db
-  store_final_only: true
   jsonl_debug_path: ""
 
 injector:

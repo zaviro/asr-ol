@@ -4,10 +4,18 @@ import json
 import queue
 import subprocess
 import threading
+import time
 
-from voxkeep.modules.capture.public import WorkerCaptureModule
+from voxkeep.modules.capture.public import build_capture_module
+from voxkeep.modules.storage.public import StorageEvent
 from voxkeep.shared.config import CaptureConfig, WakeRuleConfig
-from voxkeep.shared.events import AsrFinalEvent, VadEvent, WakeEvent
+from voxkeep.shared.events import (
+    AsrFinalEvent,
+    CaptureCommand,
+    CaptureEvent,
+    VadEvent,
+    WakeEvent,
+)
 
 
 def test_openclaw_triggered_by_wake_with_asr_hi_returns_payload(require_openclaw_real: None):
@@ -22,14 +30,12 @@ def test_openclaw_triggered_by_wake_with_asr_hi_returns_payload(require_openclaw
     payload = json.loads(agents.stdout)
     assert any(item.get("id") == "main" for item in payload if isinstance(item, dict))
 
-    wake_q: queue.Queue[WakeEvent] = queue.Queue()
-    vad_q: queue.Queue[VadEvent] = queue.Queue()
-    asr_q: queue.Queue[AsrFinalEvent] = queue.Queue()
-    out_q = queue.Queue()
-    storage_q = queue.Queue()
+    event_queue: queue.Queue[CaptureEvent] = queue.Queue()
+    command_queue: queue.Queue[CaptureCommand] = queue.Queue()
+    storage_queue: queue.Queue[StorageEvent] = queue.Queue()
+    stop_event = threading.Event()
 
     cfg = CaptureConfig(
-        wake_threshold=0.5,
         wake_rules=(
             WakeRuleConfig(
                 keyword="hey_jarvis", enabled=True, threshold=0.5, action="openclaw_agent"
@@ -39,37 +45,39 @@ def test_openclaw_triggered_by_wake_with_asr_hi_returns_payload(require_openclaw
         vad_silence_ms=300,
         pre_roll_ms=200,
         armed_timeout_ms=2000,
-        max_queue_size=10,
     )
 
-    module = WorkerCaptureModule(
-        wake_queue=wake_q,
-        vad_queue=vad_q,
-        asr_queue=asr_q,
-        downstream_queue=out_q,
-        storage_queue=storage_q,
-        stop_event=threading.Event(),
+    worker = build_capture_module(
+        event_queue=event_queue,
+        command_queue=command_queue,
+        storage_queue=storage_queue,
+        stop_event=stop_event,
         cfg=cfg,
     )
+    worker.start()
 
-    wake_q.put(WakeEvent(ts=10.0, score=0.9, keyword="hey_jarvis"))
-    asr_q.put(
+    base = time.time()
+    event_queue.put(WakeEvent(ts=base, score=0.9, keyword="hey_jarvis"))
+    event_queue.put(
         AsrFinalEvent(
             segment_id="seg-1",
             text=prompt_text,
-            start_ts=10.05,
-            end_ts=10.3,
+            start_ts=base + 0.05,
+            end_ts=base + 0.3,
         )
     )
-    vad_q.put(VadEvent(ts=10.1, event_type="speech_start", score=0.9))
-    vad_q.put(VadEvent(ts=10.5, event_type="speech_end", score=0.1))
-    module._consume_once()
-    module._consume_once()
+    event_queue.put(VadEvent(ts=base + 0.1, event_type="speech_start", score=0.9))
+    event_queue.put(VadEvent(ts=base + 0.5, event_type="speech_end", score=0.1))
+    try:
+        cmd = command_queue.get(timeout=2.0)
+    finally:
+        stop_event.set()
+        worker.join(timeout=2.0)
 
-    cmd = out_q.get_nowait()
     assert cmd.action == "openclaw_agent"
     assert cmd.keyword == "hey_jarvis"
     assert cmd.text == prompt_text
+    assert storage_queue.get_nowait() == cmd
 
     proc = subprocess.run(
         [

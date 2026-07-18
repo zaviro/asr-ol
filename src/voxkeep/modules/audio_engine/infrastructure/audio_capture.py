@@ -7,7 +7,6 @@ import threading
 import time
 from typing import Any
 
-from voxkeep.shared.interfaces import AudioSource
 from voxkeep.shared.config import AudioEngineConfig
 from voxkeep.shared.events import RawAudioChunk
 from voxkeep.shared.queue_utils import put_nowait_or_drop
@@ -15,7 +14,7 @@ from voxkeep.shared.queue_utils import put_nowait_or_drop
 logger = logging.getLogger(__name__)
 
 
-class SoundDeviceAudioSource(AudioSource):
+class SoundDeviceAudioSource:
     """Single audio input stream. Callback must remain enqueue-only."""
 
     def __init__(self, out_queue: queue.Queue[RawAudioChunk], cfg: AudioEngineConfig):

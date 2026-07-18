@@ -14,7 +14,7 @@ The repository follows a **modular-monolith** shape. Primary runtime code lives 
 - `modules/audio_engine/`: audio capture, preprocessing, audio bus, and audio engine infrastructure.
 - `shared/`: shared config, types, logging, and queue utilities.
 - `bootstrap/`: top-level runtime wiring and lifecycle orchestration.
-- `api/` and `cli/`: external entrypoints and operator-facing APIs.
+- `cli/`: operator-facing entrypoint and commands.
 
 **Note**: Legacy runtime packages `core/`, `infra/`, and `services/` are retired. Do not add new code there.
 
@@ -31,10 +31,10 @@ The repository follows a **modular-monolith** shape. Primary runtime code lives 
 ## Environment Assumptions
 - Use `uv run --python 3.11 ...` for all Python commands.
 - `make sync-ai` is required for local AI behavior (includes `openwakeword`, `silero-vad`, `torch`).
-- The supported ASR path is **`funasr_ws`** against the repository-managed Docker service (default: `ws://127.0.0.1:10096/`).
+- The supported ASR backend is **`funasr_ws`**. It targets the repository-managed Docker service by default (`ws://127.0.0.1:10096/`) and may also use a compatible external FunASR service.
 - The default FunASR image listens on container port `10095`; Compose publishes it as host port `10096`.
 - Qwen ASR is no longer supported; do not restore Qwen-specific runtime code or configuration.
-- Session type impacts injection: `xdotool` for X11, `ydotool` for Wayland.
+- With `injector.backend: auto`, X11 selects `xdotool` and Wayland selects `ydotool`.
 
 ## Build, Test, and Development Commands
 - `make sync-ai`: install dev and runtime AI dependencies.

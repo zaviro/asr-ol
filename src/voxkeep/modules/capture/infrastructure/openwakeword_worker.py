@@ -10,7 +10,7 @@ from typing import Any, Mapping, Protocol, Sequence
 
 import numpy as np
 from voxkeep.shared.config import WakeRuleConfig
-from voxkeep.shared.events import ProcessedFrame, WakeEvent
+from voxkeep.shared.events import CaptureEvent, ProcessedFrame, WakeEvent
 from voxkeep.shared.queue_utils import put_nowait_or_drop
 
 logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ class OpenWakeWordWorker:
     def __init__(
         self,
         in_queue: queue.Queue[ProcessedFrame],
-        out_queue: queue.Queue[WakeEvent],
+        out_queue: queue.Queue[CaptureEvent],
         stop_event: threading.Event,
         rules: Sequence[WakeRuleConfig | Mapping[str, Any]],
         scorer: WakeScorer | None = None,

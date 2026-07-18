@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 import json
-import threading
 from typing import Any
 
 import numpy as np
@@ -78,7 +77,7 @@ def test_is_final_distinguishes_two_pass_partial_and_corrected_results(
 
 
 def test_session_config_matches_official_funasr_two_pass_protocol(app_config: AppConfig) -> None:
-    engine = FunAsrWsEngine(cfg=app_config.asr, stop_event=threading.Event())
+    engine = FunAsrWsEngine(cfg=app_config.asr)
 
     assert engine._session_config() == {
         "mode": "2pass",
@@ -97,11 +96,10 @@ def test_session_config_matches_official_funasr_two_pass_protocol(app_config: Ap
 def test_sender_wraps_binary_pcm_with_start_and_end_control_messages(
     app_config: AppConfig,
 ) -> None:
-    stop = threading.Event()
-    engine = FunAsrWsEngine(cfg=app_config.asr, stop_event=stop)
+    engine = FunAsrWsEngine(cfg=app_config.asr)
     ws = _FakeSender()
     engine.submit_frame(_frame())
-    stop.set()
+    engine.close()
 
     asyncio.run(engine._sender(ws))
 
@@ -113,12 +111,11 @@ def test_sender_wraps_binary_pcm_with_start_and_end_control_messages(
 def test_sender_reframes_audio_to_official_sixty_millisecond_chunks(
     app_config: AppConfig,
 ) -> None:
-    stop = threading.Event()
-    engine = FunAsrWsEngine(cfg=app_config.asr, stop_event=stop)
+    engine = FunAsrWsEngine(cfg=app_config.asr)
     ws = _FakeSender()
     engine.submit_frame(_frame(1))
     engine.submit_frame(_frame(2))
-    stop.set()
+    engine.close()
 
     asyncio.run(engine._sender(ws))
 
@@ -127,7 +124,8 @@ def test_sender_reframes_audio_to_official_sixty_millisecond_chunks(
 
 
 def test_receiver_emits_only_corrected_final_text(app_config: AppConfig) -> None:
-    engine = FunAsrWsEngine(cfg=app_config.asr, stop_event=threading.Event())
+    engine = FunAsrWsEngine(cfg=app_config.asr)
+    engine._remember_frame(_frame())
     ws = _FakeReceiver(
         [
             '{"mode":"2pass-online","text":"partial","is_final":true}',
@@ -140,13 +138,14 @@ def test_receiver_emits_only_corrected_final_text(app_config: AppConfig) -> None
     event = engine.final_queue.get_nowait()
     assert event.text == "最终文本"
     assert event.segment_id == "seg-1"
+    assert event.start_ts == 1.0
+    assert event.end_ts == 1.032
     assert engine.final_queue.empty()
 
 
 def test_submit_frame_drops_new_frame_when_queue_is_full(app_config: AppConfig) -> None:
     engine = FunAsrWsEngine(
         cfg=replace(app_config.asr, max_queue_size=1),
-        stop_event=threading.Event(),
     )
 
     engine.submit_frame(_frame(1))
@@ -159,10 +158,8 @@ def test_submit_frame_drops_new_frame_when_queue_is_full(app_config: AppConfig) 
 
 
 def test_run_reconnects_after_session_failure(app_config: AppConfig, monkeypatch) -> None:
-    stop = threading.Event()
     engine = FunAsrWsEngine(
         cfg=replace(app_config.asr, reconnect_initial_s=0.001, reconnect_max_s=0.004),
-        stop_event=stop,
     )
     attempts = 0
 
@@ -171,7 +168,7 @@ def test_run_reconnects_after_session_failure(app_config: AppConfig, monkeypatch
         attempts += 1
         if attempts == 1:
             raise RuntimeError("boom")
-        stop.set()
+        engine.close()
 
     monkeypatch.setattr(engine, "_run_session", _run_session)
 
